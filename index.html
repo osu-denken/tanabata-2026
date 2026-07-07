@@ -669,8 +669,25 @@
             });
 
             window.addEventListener('resize', () => {
-                drawBamboo();
-                currentWishes.forEach(wish => createWishElement(wish, false));
+                // スマホのキーボード表示/非表示など、高さのみの変化では再描画をスキップする
+                if (window.innerWidth !== lastInnerWidth) {
+                    lastInnerWidth = window.innerWidth;
+                    
+                    // 未保存（入力中）の短冊要素を退避
+                    const unsavedWishes = Array.from(document.querySelectorAll('.tanzaku-el[data-fixed="false"]'));
+
+                    // 竹や枝を描画し直す（レイヤーの中身がいったん空になる）
+                    drawBamboo();
+                    
+                    // 保存済みの短冊を再描画
+                    currentWishes.forEach(wish => createWishElement(wish, false));
+                    
+                    // 退避しておいた未保存の短冊を再度レイヤーに戻す
+                    const layer = document.getElementById('wishes-layer');
+                    unsavedWishes.forEach(el => {
+                        layer.appendChild(el);
+                    });
+                }
             });
 
             function triggerStarfall(x, y) {
