@@ -100,6 +100,31 @@ export default {
         });
       }
 
+      // 星（願い）を追加する (POST /api/wishes/star)
+      if (method === "POST" && url.pathname === "/api/wishes/star") {
+        const { id, bamboo_id } = await request.json();
+        
+        let currentDataRaw = await env.TANABATA_KV.get(`bamboo:data:${bamboo_id}`);
+        if (!currentDataRaw) return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+
+        let currentData = JSON.parse(currentDataRaw);
+        const wishIndex = currentData.findIndex(w => w.id === id);
+        
+        if (wishIndex !== -1) {
+          // 星の数をインクリメント
+          currentData[wishIndex].stars = (currentData[wishIndex].stars || 0) + 1;
+          await env.TANABATA_KV.put(`bamboo:data:${bamboo_id}`, JSON.stringify(currentData));
+          
+          return new Response(JSON.stringify({ success: true, stars: currentData[wishIndex].stars }), {
+            headers: { "Content-Type": "application/json", ...CORS_HEADERS }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: false, error: "Not found" }), { 
+          status: 404, headers: { "Content-Type": "application/json", ...CORS_HEADERS } 
+        });
+      }
+
       // 短冊の削除 (DELETE /api/wishes)
       if (method === "DELETE" && url.pathname === "/api/wishes") {
         const { id, bamboo_id, user_token } = await request.json();
