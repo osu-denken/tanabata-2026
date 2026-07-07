@@ -100,9 +100,9 @@ export default {
         });
       }
 
-      // 星（願い）を追加する (POST /api/wishes/star)
+      // 願い！ を加算、解除する (POST /api/wishes/star)
       if (method === "POST" && url.pathname === "/api/wishes/star") {
-        const { id, bamboo_id } = await request.json();
+        const { id, bamboo_id, action } = await request.json();
         
         let currentDataRaw = await env.TANABATA_KV.get(`bamboo:data:${bamboo_id}`);
         if (!currentDataRaw) return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
@@ -111,8 +111,12 @@ export default {
         const wishIndex = currentData.findIndex(w => w.id === id);
         
         if (wishIndex !== -1) {
-          // 星の数をインクリメント
-          currentData[wishIndex].stars = (currentData[wishIndex].stars || 0) + 1;
+          // アクションに応じて星の数を増減（0未満にはならないように）
+          if (action === 'remove') {
+            currentData[wishIndex].stars = Math.max(0, (currentData[wishIndex].stars || 0) - 1);
+          } else {
+            currentData[wishIndex].stars = (currentData[wishIndex].stars || 0) + 1;
+          }
           await env.TANABATA_KV.put(`bamboo:data:${bamboo_id}`, JSON.stringify(currentData));
           
           return new Response(JSON.stringify({ success: true, stars: currentData[wishIndex].stars }), {

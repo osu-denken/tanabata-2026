@@ -8,6 +8,11 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* 風の周期を全体で統一して枝と短冊の揺れを同期させる */
+        :root {
+            --wind-cycle: 5s;
+        }
+
         /* 夜空の背景 */
         body {
             background: radial-gradient(circle at bottom, #1e1b4b 0%, #0f172a 100%);
@@ -23,28 +28,38 @@
             text-orientation: upright;
         }
 
+        /* 流れ星 */
+        .shooting-star {
+            position: absolute;
+            width: 2px;
+            height: 80px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1));
+            opacity: 0;
+            z-index: 1;
+            pointer-events: none;
+        }
+        @keyframes shooting {
+            /* 右上から左下へ向かうため、45度回転させて左下に移動させる */
+            0% { transform: translate(0, 0) rotate(45deg); opacity: 1; }
+            20% { transform: translate(-100vw, 100vw) rotate(45deg); opacity: 0; }
+            100% { opacity: 0; }
+        }
+
+        /* 枝の揺れアニメーション (風を受けて全体が右に少し傾く) */
+        .bamboo-branch {
+            animation: sway-branch var(--wind-cycle) ease-in-out infinite;
+        }
+        @keyframes sway-branch {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(3deg); }
+        }
+
         /* ドラッグ時の浮遊感 */
         .dragging {
             z-index: 100 !important;
             transform: scale(1.1) rotate(-3deg) !important;
             filter: drop-shadow(0 15px 15px rgba(0,0,0,0.6)) !important;
-            /* box-shadow: 0 10px 25px rgba(0,0,0,0.5); */
             transition: transform 0.1s;
-        }
-
-        /* 短冊の揺れアニメーション */
-        @keyframes sway {
-            0% { transform: rotate(-4deg); }
-            100% { transform: rotate(4deg); }
-        }
-
-        /* 吊るされている（fixed=true）かつ、ドラッグ中ではない時に揺らす */
-        .tanzaku-el[data-fixed="true"]:not(.dragging) {
-            transform-origin: 50% -32px; /* ワッカの円の中心あたりを支点に設定 */
-            animation-name: sway;
-            animation-timing-function: ease-in-out;
-            animation-iteration-count: infinite;
-            animation-direction: alternate;
         }
 
         /* 短冊の基本スタイル */
@@ -59,45 +74,38 @@
             transition: left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s;
         }
 
+        /* 短冊の揺れアニメーション（枝と同じ周期でさらに自身も揺れる） */
+        .tanzaku-el[data-fixed="true"]:not(.dragging) {
+            transform-origin: 50% -32px; /* ワッカの円の中心あたりを支点に設定 */
+            animation: sway-tanzaku var(--wind-cycle) ease-in-out infinite;
+        }
+        @keyframes sway-tanzaku {
+            0%, 100% { transform: rotate(-2deg); }
+            50% { transform: rotate(4deg); }
+        }
+
         /* 穴と3D立体交差の紐 */
-        
-        /* 紙本体（完全に透明な穴をくり抜く） */
         .tanzaku-paper {
             position: absolute;
             inset: 0;
-            /* 穴の中心を上から16pxの位置、半径4pxでくり抜く */
             -webkit-mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
             mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
-            z-index: 2; /* 紙はレイヤー2 */
+            z-index: 2;
         }
-
-        /* 紐のベーススタイル（楕円のリング） */
         .koyori-loop {
             position: absolute;
             top: -32px;
-            /* left: calc(50% - 2px); */
             left: 50%;
             transform: translateX(-50%);
             width: 12px;
-            height: 50px; /* 穴の下端（y=20px）まで届く高さ */
+            height: 50px;
             border: 2px solid #9c6d2f;
             border-radius: 50%;
             box-sizing: border-box;
         }
+        .koyori-loop.back { z-index: 1; clip-path: inset(0 50% 0 0); }
+        .koyori-loop.front { z-index: 3; clip-path: inset(0 0 0 50%); }
 
-        /* 左半分（紙の裏側を通る） */
-        .koyori-loop.back {
-            z-index: 1; /* 紙(2)より奥 */
-            clip-path: inset(0 50% 0 0); /* 右半分を非表示にして、左半分だけにする */
-        }
-
-        /* 右半分（紙の手前を通る） */
-        .koyori-loop.front {
-            z-index: 3; /* 紙(2)より手前 */
-            clip-path: inset(0 0 0 50%); /* 左半分を非表示にして、右半分だけにする */
-        }
-
-        /* ドラッグ用の透明な判定エリア */
         .wakka-handle {
             position: absolute;
             top: -16px;
@@ -108,9 +116,7 @@
             cursor: grab;
             z-index: 10;
         }
-        .wakka-handle:active {
-            cursor: grabbing;
-        }
+        .wakka-handle:active { cursor: grabbing; }
         
         .tanzaku-input {
             position: relative;
@@ -130,7 +136,43 @@
             overflow-wrap: break-word;
         }
 
-        /* スロット（目印用・ナビエフェクト） */
+        /* 「★願う！」ボタン */
+        .star-btn {
+            position: absolute;
+            bottom: -24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.4);
+            color: #fef08a;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 999px;
+            padding: 1px 4px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: all 0.2s;
+            white-space: nowrap;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .star-btn:hover {
+            background: rgba(253, 224, 71, 0.3);
+            /* transform: translateX(-50%) scale(1.05); */
+        }
+        .star-btn:active { transform: translateX(-50%) scale(0.95); }
+        
+        /* 願った後のアクティブ状態 */
+        .star-btn.active {
+            background: rgba(253, 224, 71, 0.6);
+            color: #fff;
+            border-color: rgba(253, 224, 71, 0.8);
+            box-shadow: 0 0 10px rgba(253, 224, 71, 0.4);
+        }
+
+        /* スロットマーカー */
         .slot-marker {
             position: absolute;
             width: 60px;
@@ -142,13 +184,11 @@
             transition: opacity 0.3s, transform 0.3s;
             z-index: 20;
         }
-
         body.is-dragging .slot-marker.is-empty {
             opacity: 0.4;
             transform: translate(-50%, -50%) scale(0.8);
             border: 2px dashed rgba(253, 224, 71, 0.5);
         }
-
         body.is-dragging .slot-marker.is-empty.active {
             background: radial-gradient(circle, rgba(253, 224, 71, 0.8) 0%, rgba(253, 224, 71, 0) 70%);
             opacity: 1;
@@ -156,7 +196,6 @@
             border: none;
             animation: pulse-glow 1s infinite alternate;
         }
-
         @keyframes pulse-glow {
             0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
             100% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
@@ -164,6 +203,11 @@
     </style>
 </head>
 <body class="text-white h-screen w-screen relative">
+
+    <!-- 流れ星 -->
+    <div class="shooting-star" style="top: -10%; left: 80%; animation: shooting 5s linear infinite 0s;"></div>
+    <div class="shooting-star" style="top: 10%; left: 50%; animation: shooting 5s linear infinite 2.2s;"></div>
+    <div class="shooting-star" style="top: -20%; left: 120%; animation: shooting 5s linear infinite 4.1s;"></div>
 
     <div class="fixed top-6 left-0 right-0 flex justify-between items-center px-6 z-20 pointer-events-none">
         <button id="btn-prev" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
@@ -213,6 +257,19 @@
             localStorage.setItem('user_token', userToken);
         }
 
+        // 自分が「願う！」を押した短冊のIDリスト
+        let starredWishes = JSON.parse(localStorage.getItem('starred_wishes') || '[]');
+        
+        function toggleStarStorage(id) {
+            const index = starredWishes.indexOf(id);
+            if (index > -1) {
+                starredWishes.splice(index, 1);
+            } else {
+                starredWishes.push(id);
+            }
+            localStorage.setItem('starred_wishes', JSON.stringify(starredWishes));
+        }
+
         let currentBambooId = 1;
         let latestBambooId = 1;
         let currentWishes = [];
@@ -229,7 +286,6 @@
         function drawBamboo() {
             const container = document.getElementById('bamboo-container');
             const svg = document.getElementById('bamboo-svg');
-            
             const width = container.clientWidth;
             const height = container.clientHeight;
             if (width === 0 || height === 0) return; 
@@ -252,20 +308,71 @@
                 </defs>
             `;
 
-            const numNodes = 12;
+            // 竹の高さ制限（画面の85%）と曲がりの計算
+            const maxHeight = height * 0.85;
+            const numNodes = 12; // 12固定
             const trunkWidth = 20;
-            const trunkX = width / 2;
+            const trunkBaseX = width / 2;
+            const trunkStartY = height; // 一番下から描画開始
             
+            // 竹の幹の各ポイント（節）の座標を計算
+            const trunkPoints = [];
+            for (let i = 0; i <= numNodes; i++) {
+                // 上(0)から下(12)に向かって処理
+                const progress = 1 - (i / numNodes); // 上に行くほど1
+                const curveOffset = 30 * Math.pow(progress, 2); // 上に行くほど右に曲がる
+                const x = trunkBaseX + curveOffset;
+                const y = trunkStartY - maxHeight + maxHeight * (i / numNodes);
+                trunkPoints.push({ x, y });
+            }
+
+            // --- グラデーション（影）を追従させるため、節ごとに分けて描画 ---
             for (let i = 0; i < numNodes; i++) {
-                const y1 = height * (i / numNodes);
-                const nodeHeight = height / numNodes;
+                const pt1 = trunkPoints[i];     // 節の上端
+                const pt2 = trunkPoints[i + 1]; // 節の下端
                 
-                svgContent += `<rect x="${trunkX - trunkWidth/2}" y="${y1}" width="${trunkWidth}" height="${nodeHeight}" fill="url(#trunk-grad)" />`;
-                
-                if (i > 0) {
-                    svgContent += `<ellipse cx="${trunkX}" cy="${y1}" rx="${trunkWidth/2 + 2}" ry="4" fill="#14532d" />`;
-                    svgContent += `<ellipse cx="${trunkX}" cy="${y1}" rx="${trunkWidth/2 + 1}" ry="2" fill="#4ade80" opacity="0.6" />`;
-                }
+                const dx = pt2.x - pt1.x;
+                const dy = pt2.y - pt1.y;
+                const angleRad = Math.atan2(dy, dx);
+                const angleDeg = angleRad * (180 / Math.PI);
+                const segmentLength = Math.hypot(dx, dy);
+
+                // 垂直(90度)を基準に回転を調整
+                const rotation = angleDeg - 90;
+
+                // 各セグメントを回転させることで、線形グラデーションも一緒に回転する
+                svgContent += `<g transform="translate(${pt1.x}, ${pt1.y}) rotate(${rotation})">`;
+                // 継ぎ目の隙間をなくすため、長さに +2 余裕を持たせる
+                svgContent += `<rect x="${-trunkWidth/2}" y="0" width="${trunkWidth}" height="${segmentLength + 2}" fill="url(#trunk-grad)" />`;
+                svgContent += `</g>`;
+            }
+
+            // --- 節（ジョイント）の描画 ---
+            const nodeXPositions = []; // 枝の描画用に保存
+
+            // const jointCount = numNodes / 2;
+            for (let i = 0; i < numNodes; i++) {
+                const progress = 1 - ((i + 0.5) / numNodes);
+                const curveOffset = 30 * Math.pow(progress, 2);
+                nodeXPositions.push(trunkBaseX + curveOffset);
+            }
+
+            for (let i = 0; i < numNodes; i++) {
+                const pt = trunkPoints[i];
+                // 前後のポイントから幹の傾きを計算し、節の楕円をそれに合わせて回転させる
+
+               if (i % 2 === 1) continue
+
+                const prev = i === 0 ? trunkPoints[i] : trunkPoints[i - 1];
+                const next = trunkPoints[i + 1];
+                const angleRad = Math.atan2(next.y - prev.y, next.x - prev.x);
+                const angleDeg = angleRad * (180 / Math.PI);
+                const rotation = angleDeg - 90;
+
+                svgContent += `<g transform="translate(${pt.x}, ${pt.y}) rotate(${rotation})">`;
+                svgContent += `<ellipse cx="0" cy="0" rx="${trunkWidth/2 + 2}" ry="4" fill="#14532d" />`;
+                svgContent += `<ellipse cx="0" cy="0" rx="${trunkWidth/2 + 1}" ry="2" fill="#4ade80" opacity="0.6" />`;
+                svgContent += `</g>`;
             }
 
             const createLeaf = (cx, cy, angle, scale) => {
@@ -275,8 +382,16 @@
                               filter="url(#shadow)" />`;
             };
 
+            // 枝の描画
             SLOT_POSITIONS.forEach((pos, idx) => {
-                const startX = trunkX;
+                // スロットのY座標(%)から、対応する竹の節のだいたいの高さを逆算してX座標を取得
+                const targetYPercent = pos.y;
+                // 画面全体のY%を、幹の描画範囲のインデックスに変換
+                let nodeIndex = Math.floor((targetYPercent / 100) * numNodes);
+                if (nodeIndex >= numNodes) nodeIndex = numNodes - 1;
+                if (nodeIndex < 0) nodeIndex = 0;
+
+                const startX = nodeXPositions[nodeIndex];
                 const startY = height * ((pos.y + 5) / 100);
                 const targetX = width * (pos.x / 100);
                 const targetY = height * (pos.y / 100);
@@ -286,6 +401,9 @@
                 const cp1Y = startY - 20;
                 const cp2X = startX + (targetX - startX) * 0.7;
                 const cp2Y = targetY - 10;
+                
+                // 枝のアニメーションのために <g> タグでグループ化し、起点を設定
+                svgContent += `<g class="bamboo-branch" style="transform-origin: ${startX}px ${startY}px;">`;
                 
                 svgContent += `<path d="M ${startX},${startY} C ${cp1X},${cp1Y} ${cp2X},${cp2Y} ${targetX},${targetY}" 
                                      fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round" />`;
@@ -297,6 +415,8 @@
                 const midX = startX + (targetX - startX) * 0.5;
                 const midY = startY + (targetY - startY) * 0.5;
                 svgContent += createLeaf(midX, midY, isRight ? 30 : 150, 0.5);
+                
+                svgContent += `</g>`; // グループを閉じる
             });
 
             svg.innerHTML = svgContent;
@@ -324,20 +444,27 @@
             const isMine = isNew || wishData.created_by === userToken;
             el.dataset.owned = isMine.toString();
 
-            // 揺らぎを自然にするためのランダム設定
-            const randomDuration = 2.5 + Math.random() * 2; // 2.5秒〜4.5秒の周期
-            const randomDelay = -Math.random() * 5; // 初期の位相をずらすためマイナス値
-            el.style.animationDuration = `${randomDuration}s`;
-            el.style.animationDelay = `${randomDelay}s`;
+            const stars = wishData.stars || 0;
+            // ローカルストレージを見て、自分がすでに願っているか確認
+            const isStarred = starredWishes.includes(wishData.id);
+            const btnClass = isStarred ? 'star-btn active' : 'star-btn';
 
-            // ペーパー自体に色をつける
-            el.innerHTML = `
+            let htmlContent = `
                 <div class="koyori-loop back"></div>
                 <div class="tanzaku-paper" style="background-color: ${wishData.color};"></div>
                 <div class="koyori-loop front"></div>
                 <div class="wakka-handle"></div>
                 <div class="tanzaku-input vertical-text" ${(!isNew && !isMine) ? 'contenteditable="false"' : 'contenteditable="true"'} placeholder="願い事">${wishData.text || ''}</div>
             `;
+            
+            // 吊るし済みの短冊に「★願う！」ボタンを追加
+            if (!isNew) {
+                htmlContent += `<button class="${btnClass}" data-id="${wishData.id}">
+                                    <i class="fa-solid fa-star"></i> 願う！ <span class="star-count">${stars}</span>
+                                </button>`;
+            }
+            
+            el.innerHTML = htmlContent;
 
             if (!isNew && wishData.slot_index !== undefined) {
                 const pos = SLOT_POSITIONS[wishData.slot_index];
@@ -353,6 +480,54 @@
             
             if (isNew) {
                 setTimeout(() => el.querySelector('.tanzaku-input').focus(), 50);
+            }
+
+            // 「★願う！」ボタンのイベントリスナー
+            if (!isNew) {
+                const starBtn = el.querySelector('.star-btn');
+                if (starBtn) {
+                    starBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation(); // ドラッグ開始のイベントが発火するのを防ぐ
+                        const countSpan = starBtn.querySelector('.star-count');
+                        
+                        // 現在の状態から追加か解除かを判定
+                        const currentlyStarred = starBtn.classList.contains('active');
+                        const action = currentlyStarred ? 'remove' : 'add';
+                        
+                        // 更新
+                        if (action === 'add') {
+                            countSpan.innerText = parseInt(countSpan.innerText) + 1;
+                            starBtn.classList.add('active');
+                            toggleStarStorage(el.dataset.id);
+                            // triggerStarfall(e.clientX, e.clientY); // 星が降るエフェクト
+                        } else {
+                            countSpan.innerText = Math.max(0, parseInt(countSpan.innerText) - 1);
+                            starBtn.classList.remove('active');
+                            toggleStarStorage(el.dataset.id);
+                        }
+
+                        try {
+                            const res = await fetchAPI('POST', '/api/wishes/star', {
+                                id: el.dataset.id,
+                                bamboo_id: currentBambooId,
+                                action: action
+                            });
+                            const data = await res.json();
+                            if (!data.success) throw new Error("API Error");
+                        } catch (err) {
+                            // 失敗したら元に戻す
+                            if (action === 'add') {
+                                countSpan.innerText = Math.max(0, parseInt(countSpan.innerText) - 1);
+                                starBtn.classList.remove('active');
+                            } else {
+                                countSpan.innerText = parseInt(countSpan.innerText) + 1;
+                                starBtn.classList.add('active');
+                            }
+                            toggleStarStorage(el.dataset.id);
+                            console.error("Star update failed:", err);
+                        }
+                    });
+                }
             }
 
             bindDragEvents(el);
@@ -516,12 +691,10 @@
                         if (data.success) {
                             triggerStarfall(wakkaX, wakkaY);
                             
-                            el.dataset.fixed = 'true';
-                            el.dataset.id = data.wish.id;
-                            el.dataset.slot = closestSlot;
-                            el.style.pointerEvents = 'auto';
-                            
+                            // 保存成功後、短冊の見た目を更新（★ボタンを追加するため再生成）
+                            el.remove();
                             currentWishes.push(data.wish);
+                            createWishElement(data.wish, false);
 
                             if (data.bamboo_id > currentBambooId) {
                                 latestBambooId = data.bamboo_id;
