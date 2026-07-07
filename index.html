@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>デジタル七夕</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Font Awesomeの導入 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 夜空の背景 */
+        body {
+            background: radial-gradient(circle at bottom, #1e1b4b 0%, #0f172a 100%);
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Noto Serif JP', serif;
+            touch-action: none;
+        }
+        
+        /* 縦書き設定 */
+        .vertical-text {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+        }
+
+        /* ドラッグ時の浮遊感 */
+        .dragging {
+            z-index: 100 !important;
+            transform: scale(1.1) rotate(-3deg);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+
+        /* 短冊の基本スタイル */
+        .tanzaku-el {
+            position: absolute;
+            width: 4.5rem;
+            height: 14rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-radius: 2px;
+            transition: left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s;
+        }
+        
+        /* ワッカ */
+        .wakka-handle {
+            width: 100%;
+            height: 2rem;
+            position: relative;
+            cursor: grab;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 2px;
+            flex-shrink: 0;
+        }
+        .wakka-handle:active {
+            cursor: grabbing;
+        }
+        .wakka-circle {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #9ca3af;
+            border-radius: 50%;
+            background: transparent;
+            position: absolute;
+            top: -8px;
+        }
+        
+        .tanzaku-input {
+            flex-grow: 1;
+            width: 100%;
+            padding: 0.5rem 0.2rem;
+            outline: none;
+            background: transparent;
+            text-align: start;
+            font-size: 1.1rem;
+            overflow-x: auto;
+            overflow-y: hidden;
+            line-height: 1.4;
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+
+        /* スロット（目印用・ナビエフェクト） */
+        .slot-marker {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(253, 224, 71, 0.6) 0%, rgba(253, 224, 71, 0) 70%);
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 20;
+        }
+
+        body.is-dragging .slot-marker.is-empty {
+            opacity: 0.4;
+            transform: translate(-50%, -50%) scale(0.8);
+            border: 2px dashed rgba(253, 224, 71, 0.5);
+        }
+
+        body.is-dragging .slot-marker.is-empty.active {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.2);
+            border: none;
+            animation: pulse-glow 1s infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
+            100% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="text-white h-screen w-screen relative">
+
+    <div class="fixed top-6 left-0 right-0 flex justify-between items-center px-6 z-20 pointer-events-none">
+        <button id="btn-prev" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
+            <i class="fa-solid fa-chevron-left mr-1"></i> 過去の竹
+        </button>
+        <div class="text-xl font-bold bg-black/30 px-4 py-2 rounded-full backdrop-blur border border-white/10 shadow-lg">
+            竹 <span id="lbl-bamboo-id">1</span>
+        </div>
+        <button id="btn-next" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
+            新しい竹 <i class="fa-solid fa-chevron-right ml-1"></i>
+        </button>
+    </div>
+
+    <div id="bamboo-container" class="absolute inset-0 max-w-3xl mx-auto">
+        <svg id="bamboo-svg" class="absolute inset-0 w-full h-full pointer-events-none z-0"></svg>
+        <div id="wishes-layer" class="absolute inset-0 pointer-events-none z-10"></div>
+    </div>
+
+    <!-- Font Awesome を使ったアイコンに変更 -->
+    <button id="fab-pen" class="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-full flex justify-center items-center text-white text-2xl shadow-xl shadow-cyan-900/50 hover:scale-110 active:scale-95 transition-transform z-30 pointer-events-auto border-2 border-white/20">
+        <i class="fa-solid fa-pen"></i>
+    </button>
+
+    <script>
+        const API_BASE_URL = '';
+        const COLORS = ['#bfdbfe', '#fecaca', '#fef08a', '#f3f4f6', '#e9d5ff'];
+        
+        // 枝の先端（スロット）の座標 (画面に対するパーセンテージ)
+        const SLOT_POSITIONS = [
+            { x: 25, y: 15 }, { x: 75, y: 18 },
+            { x: 15, y: 28 }, { x: 85, y: 32 },
+            { x: 28, y: 42 }, { x: 72, y: 45 },
+            { x: 18, y: 55 }, { x: 82, y: 58 },
+            { x: 30, y: 68 }, { x: 70, y: 72 },
+            { x: 20, y: 82 }, { x: 80, y: 85 }
+        ];
+
+        let userToken = localStorage.getItem('user_token');
+        if (!userToken) {
+            userToken = crypto.randomUUID();
+            localStorage.setItem('user_token', userToken);
+        }
+
+        let currentBambooId = 1;
+        let latestBambooId = 1;
+        let currentWishes = [];
+
+        class MockAPI {
+            constructor() {
+                if (!localStorage.getItem('bamboo_latest_id')) {
+                    localStorage.setItem('bamboo_latest_id', '1');
+                    localStorage.setItem('bamboo_data_1', JSON.stringify([]));
+                }
+            }
+            async get(url) {
+                const idMatch = url.match(/id=([^&]+)/);
+                let id = idMatch ? idMatch[1] : 'latest';
+                let latestId = parseInt(localStorage.getItem('bamboo_latest_id'));
+                if (id === 'latest') id = latestId;
+                const data = JSON.parse(localStorage.getItem(`bamboo_data_${id}`) || '[]');
+                return { json: async () => ({ id: parseInt(id), wishes: data, latest_id: latestId }) };
+            }
+            async post(url, body) {
+                let latestId = parseInt(localStorage.getItem('bamboo_latest_id'));
+                let data = JSON.parse(localStorage.getItem(`bamboo_data_${latestId}`) || '[]');
+                if (data.some(w => w.slot_index === body.slot_index)) return { ok: false, json: async () => ({ error: "Slot taken" }) };
+                
+                if (data.length >= 12) {
+                    latestId++;
+                    data = [];
+                    localStorage.setItem('bamboo_latest_id', latestId.toString());
+                }
+                const newWish = { id: crypto.randomUUID(), ...body };
+                data.push(newWish);
+                localStorage.setItem(`bamboo_data_${latestId}`, JSON.stringify(data));
+                return { ok: true, json: async () => ({ success: true, bamboo_id: latestId, wish: newWish }) };
+            }
+            async delete(url, body) {
+                let data = JSON.parse(localStorage.getItem(`bamboo_data_${body.bamboo_id}`) || '[]');
+                const idx = data.findIndex(w => w.id === body.id);
+                if (idx !== -1 && data[idx].created_by === body.user_token) {
+                    data.splice(idx, 1);
+                    localStorage.setItem(`bamboo_data_${body.bamboo_id}`, JSON.stringify(data));
+                    return { ok: true, json: async () => ({ success: true }) };
+                }
+                return { ok: false, json: async () => ({ error: "Failed" }) };
+            }
+        }
+        const mockApi = new MockAPI();
+
+        async function fetchAPI(method, endpoint, body = null) {
+            if (API_BASE_URL) {
+                const res = await fetch(API_BASE_URL + endpoint, {
+                    method,
+                    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+                    body: body ? JSON.stringify(body) : undefined
+                });
+                return res;
+            } else {
+                await new Promise(r => setTimeout(r, 200));
+                if (method === 'GET') return mockApi.get(endpoint);
+                if (method === 'POST') return mockApi.post(endpoint, body);
+                if (method === 'DELETE') return mockApi.delete(endpoint, body);
+            }
+        }
+
+        // --- 竹の豪華なSVG描画 (ピクセル座標計算により左上に飛ぶバグを解消) ---
+        function drawBamboo() {
+            const container = document.getElementById('bamboo-container');
+            const svg = document.getElementById('bamboo-svg');
+            
+            // 描画領域の実際のピクセルサイズを取得
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            if (width === 0 || height === 0) return; // コンテナがまだ描画されていない場合はスキップ
+
+            let svgContent = `
+                <defs>
+                    <linearGradient id="trunk-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#064e3b" />
+                        <stop offset="25%" stop-color="#166534" />
+                        <stop offset="70%" stop-color="#22c55e" />
+                        <stop offset="100%" stop-color="#14532d" />
+                    </linearGradient>
+                    <linearGradient id="leaf-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#22c55e" />
+                        <stop offset="100%" stop-color="#064e3b" />
+                    </linearGradient>
+                    <filter id="shadow">
+                        <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3" />
+                    </filter>
+                </defs>
+            `;
+
+            // 幹の描画 (ピクセル座標)
+            const numNodes = 12;
+            const trunkWidth = 20;
+            const trunkX = width / 2;
+            
+            for (let i = 0; i < numNodes; i++) {
+                const y1 = height * (i / numNodes);
+                const nodeHeight = height / numNodes;
+                
+                // 筒
+                svgContent += `<rect x="${trunkX - trunkWidth/2}" y="${y1}" width="${trunkWidth}" height="${nodeHeight}" fill="url(#trunk-grad)" />`;
+                
+                // 節
+                if (i > 0) {
+                    svgContent += `<ellipse cx="${trunkX}" cy="${y1}" rx="${trunkWidth/2 + 2}" ry="4" fill="#14532d" />`;
+                    svgContent += `<ellipse cx="${trunkX}" cy="${y1}" rx="${trunkWidth/2 + 1}" ry="2" fill="#4ade80" opacity="0.6" />`;
+                }
+            }
+
+            // 笹の葉を描画する関数（細長いシュッとした形に修正）
+            const createLeaf = (cx, cy, angle, scale) => {
+                // SVGのtranslateには単位なしの数値を渡すことで、パースエラーを防ぎます
+                return `<path d="M 0,0 C 15,-8 35,-5 45,0 C 35,5 15,8 0,0 Z" 
+                              fill="url(#leaf-grad)" 
+                              transform="translate(${cx}, ${cy}) rotate(${angle}) scale(${scale})" 
+                              filter="url(#shadow)" />`;
+            };
+
+            // 枝と葉っぱの描画
+            SLOT_POSITIONS.forEach((pos, idx) => {
+                const startX = trunkX;
+                const startY = height * ((pos.y + 5) / 100); // 幹から少し下（節のあたり）を起点にする
+                const targetX = width * (pos.x / 100);
+                const targetY = height * (pos.y / 100);
+                const isRight = targetX > startX;
+                
+                // 枝の曲線 (竹らしく、斜め上にしなってから少し垂れる軌道)
+                const cp1X = startX + (targetX - startX) * 0.3;
+                const cp1Y = startY - 20; // 一度上に持ち上がる
+                const cp2X = startX + (targetX - startX) * 0.7;
+                const cp2Y = targetY - 10;
+                
+                svgContent += `<path d="M ${startX},${startY} C ${cp1X},${cp1Y} ${cp2X},${cp2Y} ${targetX},${targetY}" 
+                                     fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round" />`;
+                
+                // 葉っぱの配置 (枝の先端付近)
+                svgContent += createLeaf(targetX, targetY, isRight ? 20 : 160, 0.7);
+                svgContent += createLeaf(targetX - (isRight ? 15 : -15), targetY + 5, isRight ? 45 : 135, 0.8);
+                svgContent += createLeaf(targetX - (isRight ? 30 : -30), targetY - 5, isRight ? -10 : 190, 0.6);
+                
+                // 葉っぱの配置 (枝の中間付近)
+                const midX = startX + (targetX - startX) * 0.5;
+                const midY = startY + (targetY - startY) * 0.5;
+                svgContent += createLeaf(midX, midY, isRight ? 30 : 150, 0.5);
+            });
+
+            svg.innerHTML = svgContent;
+
+            // スロットマーカーの初期化
+            const layer = document.getElementById('wishes-layer');
+            layer.querySelectorAll('.slot-marker').forEach(el => el.remove());
+            
+            SLOT_POSITIONS.forEach((pos, idx) => {
+                const marker = document.createElement('div');
+                marker.className = 'slot-marker';
+                marker.dataset.slotIndex = idx;
+                marker.style.left = `${pos.x}%`;
+                marker.style.top = `${pos.y}%`;
+                layer.appendChild(marker);
+            });
+        }
+
+        function createWishElement(wishData, isNew = false) {
+            const el = document.createElement('div');
+            el.className = 'tanzaku-el text-gray-900 pointer-events-auto';
+            el.style.backgroundColor = wishData.color;
+            
+            el.dataset.id = wishData.id || '';
+            el.dataset.slot = wishData.slot_index !== undefined ? wishData.slot_index : '';
+            el.dataset.fixed = (!isNew).toString();
+            const isMine = isNew || wishData.created_by === userToken;
+            el.dataset.owned = isMine.toString();
+
+            el.innerHTML = `
+                <div class="wakka-handle">
+                    <div class="wakka-circle"></div>
+                </div>
+                <div class="tanzaku-input vertical-text" ${(!isNew && !isMine) ? 'contenteditable="false"' : 'contenteditable="true"'} placeholder="願い事">${wishData.text || ''}</div>
+            `;
+
+            if (!isNew && wishData.slot_index !== undefined) {
+                const pos = SLOT_POSITIONS[wishData.slot_index];
+                el.style.left = `calc(${pos.x}% - 2.25rem)`;
+                el.style.top = `calc(${pos.y}% - 0.5rem)`;
+            } else {
+                el.style.left = `calc(50% - 2.25rem)`;
+                el.style.top = `40%`;
+                el.style.zIndex = '50';
+            }
+
+            document.getElementById('wishes-layer').appendChild(el);
+            
+            if (isNew) {
+                setTimeout(() => el.querySelector('.tanzaku-input').focus(), 50);
+            }
+
+            bindDragEvents(el);
+            return el;
+        }
+
+        let activeDragEl = null;
+        let startClientX, startClientY;
+        let startLeft, startTop;
+
+        function bindDragEvents(el) {
+            const handle = el.querySelector('.wakka-handle');
+            
+            handle.addEventListener('pointerdown', (e) => {
+                if (el.dataset.fixed === 'true' && el.dataset.owned !== 'true') return;
+
+                activeDragEl = el;
+                startClientX = e.clientX;
+                startClientY = e.clientY;
+                
+                el.style.transition = 'none';
+                const rect = el.getBoundingClientRect();
+                const parentRect = document.getElementById('wishes-layer').getBoundingClientRect();
+                
+                startLeft = rect.left - parentRect.left;
+                startTop = rect.top - parentRect.top;
+                
+                el.style.left = startLeft + 'px';
+                el.style.top = startTop + 'px';
+                
+                el.classList.add('dragging');
+                handle.setPointerCapture(e.pointerId);
+                e.preventDefault();
+
+                document.querySelectorAll('.slot-marker').forEach(marker => {
+                    const idx = parseInt(marker.dataset.slotIndex);
+                    const isEmpty = el.dataset.slot == idx || !currentWishes.some(w => w.slot_index === idx);
+                    if (isEmpty) {
+                        marker.classList.add('is-empty');
+                    } else {
+                        marker.classList.remove('is-empty');
+                    }
+                });
+                
+                document.body.classList.add('is-dragging');
+                
+                checkHoverSlot(el);
+            });
+
+            handle.addEventListener('pointermove', (e) => {
+                if (activeDragEl !== el) return;
+                const dx = e.clientX - startClientX;
+                const dy = e.clientY - startClientY;
+                el.style.left = (startLeft + dx) + 'px';
+                el.style.top = (startTop + dy) + 'px';
+                
+                checkHoverSlot(el);
+            });
+
+            handle.addEventListener('pointerup', async (e) => {
+                if (activeDragEl !== el) return;
+                activeDragEl = null;
+                handle.releasePointerCapture(e.pointerId);
+                
+                el.classList.remove('dragging');
+                el.style.transition = 'left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s';
+                
+                document.body.classList.remove('is-dragging');
+                document.querySelectorAll('.slot-marker').forEach(m => {
+                    m.classList.remove('active');
+                    m.classList.remove('is-empty');
+                });
+
+                await handleDrop(el);
+            });
+        }
+
+        function checkHoverSlot(el) {
+            const rect = el.getBoundingClientRect();
+            const wakkaX = rect.left + rect.width / 2;
+            const wakkaY = rect.top + 8;
+
+            const container = document.getElementById('wishes-layer');
+            const parentRect = container.getBoundingClientRect();
+            
+            let closestSlot = -1;
+            let minDistance = 9999;
+
+            SLOT_POSITIONS.forEach((pos, idx) => {
+                if (currentWishes.some(w => w.slot_index === idx) && el.dataset.slot != idx) return;
+
+                const sx = parentRect.left + parentRect.width * (pos.x / 100);
+                const sy = parentRect.top + parentRect.height * (pos.y / 100);
+                
+                const dist = Math.hypot(wakkaX - sx, wakkaY - sy);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestSlot = idx;
+                }
+            });
+
+            document.querySelectorAll('.slot-marker').forEach((marker) => {
+                const idx = parseInt(marker.dataset.slotIndex);
+                if (idx === closestSlot && minDistance < 40) {
+                    marker.classList.add('active');
+                } else {
+                    marker.classList.remove('active');
+                }
+            });
+        }
+
+        async function handleDrop(el) {
+            const rect = el.getBoundingClientRect();
+            const wakkaX = rect.left + rect.width / 2;
+            const wakkaY = rect.top + 8;
+
+            const container = document.getElementById('wishes-layer');
+            const parentRect = container.getBoundingClientRect();
+            
+            let closestSlot = -1;
+            let minDistance = 9999;
+
+            SLOT_POSITIONS.forEach((pos, idx) => {
+                if (currentWishes.some(w => w.slot_index === idx) && el.dataset.slot != idx) return;
+
+                const sx = parentRect.left + parentRect.width * (pos.x / 100);
+                const sy = parentRect.top + parentRect.height * (pos.y / 100);
+                
+                const dist = Math.hypot(wakkaX - sx, wakkaY - sy);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestSlot = idx;
+                }
+            });
+
+            const isFixed = el.dataset.fixed === 'true';
+            
+            if (minDistance < 40 && closestSlot !== -1) {
+                const text = el.querySelector('.tanzaku-input').innerText.trim();
+                
+                if (text === '') {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 300);
+                    return;
+                }
+
+                const pos = SLOT_POSITIONS[closestSlot];
+                el.style.left = `calc(${pos.x}% - 2.25rem)`;
+                el.style.top = `calc(${pos.y}% - 0.5rem)`;
+
+                if (!isFixed) {
+                    el.style.pointerEvents = 'none';
+                    const color = el.style.backgroundColor;
+                    
+                    const res = await fetchAPI('POST', '/api/wishes', {
+                        text, color, slot_index: closestSlot, user_token: userToken
+                    });
+                    const data = await res.json();
+                    
+                    if (data.success) {
+                        triggerStarfall(wakkaX, wakkaY);
+                        
+                        el.dataset.fixed = 'true';
+                        el.dataset.id = data.wish.id;
+                        el.dataset.slot = closestSlot;
+                        el.style.pointerEvents = 'auto';
+                        
+                        currentWishes.push(data.wish);
+
+                        if (data.bamboo_id > currentBambooId) {
+                            latestBambooId = data.bamboo_id;
+                            setTimeout(() => loadBamboo(latestBambooId), 1500);
+                        }
+                    } else {
+                        el.style.left = `calc(50% - 2.25rem)`;
+                        el.style.top = `40%`;
+                        el.style.pointerEvents = 'auto';
+                        alert("吊るすのに失敗しました。別の場所をお試しください。");
+                    }
+                } else if (isFixed && el.dataset.slot != closestSlot) {
+                    const origPos = SLOT_POSITIONS[el.dataset.slot];
+                    el.style.left = `calc(${origPos.x}% - 2.25rem)`;
+                    el.style.top = `calc(${origPos.y}% - 0.5rem)`;
+                }
+
+            } else {
+                if (isFixed) {
+                    const origPos = SLOT_POSITIONS[el.dataset.slot];
+                    const osx = parentRect.left + parentRect.width * (origPos.x / 100);
+                    const osy = parentRect.top + parentRect.height * (origPos.y / 100);
+                    const distFromOrig = Math.hypot(wakkaX - osx, wakkaY - osy);
+                    
+                    if (distFromOrig > 50) {
+                        el.style.opacity = '0';
+                        el.style.transform = 'scale(0.8) translateY(20px)';
+                        
+                        await fetchAPI('DELETE', '/api/wishes', {
+                            id: el.dataset.id,
+                            bamboo_id: currentBambooId,
+                            user_token: userToken
+                        });
+                        
+                        currentWishes = currentWishes.filter(w => w.id !== el.dataset.id);
+                        setTimeout(() => el.remove(), 300);
+                    } else {
+                        el.style.left = `calc(${origPos.x}% - 2.25rem)`;
+                        el.style.top = `calc(${origPos.y}% - 0.5rem)`;
+                    }
+                } else {
+                    const text = el.querySelector('.tanzaku-input').innerText.trim();
+                    if (text === '') {
+                        el.style.opacity = '0';
+                        setTimeout(() => el.remove(), 300);
+                    }
+                }
+            }
+        }
+
+        async function loadBamboo(id = 'latest') {
+            const layer = document.getElementById('wishes-layer');
+            layer.style.opacity = '0';
+            
+            try {
+                const res = await fetchAPI('GET', `/api/bamboo?id=${id}`);
+                const data = await res.json();
+                
+                currentBambooId = data.id;
+                latestBambooId = data.latest_id;
+                currentWishes = data.wishes;
+
+                setTimeout(() => {
+                    layer.innerHTML = '';
+                    drawBamboo(); // SVGを描画（ピクセル計算）
+                    
+                    currentWishes.forEach(wish => createWishElement(wish, false));
+                    
+                    document.getElementById('lbl-bamboo-id').innerText = currentBambooId;
+                    
+                    document.getElementById('btn-prev').disabled = (currentBambooId <= 1);
+                    document.getElementById('btn-next').disabled = (currentBambooId >= latestBambooId);
+                    
+                    layer.style.opacity = '1';
+                }, 300);
+                
+            } catch (e) {
+                console.error("Load error:", e);
+                layer.style.opacity = '1';
+            }
+        }
+
+        document.getElementById('fab-pen').addEventListener('click', () => {
+            const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+            createWishElement({ color: randomColor }, true);
+        });
+
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            if (currentBambooId > 1) loadBamboo(currentBambooId - 1);
+        });
+        document.getElementById('btn-next').addEventListener('click', () => {
+            if (currentBambooId < latestBambooId) loadBamboo(currentBambooId + 1);
+        });
+
+        // ウィンドウサイズが変わったらSVGを再計算して描画
+        window.addEventListener('resize', () => {
+            drawBamboo();
+        });
+
+        function triggerStarfall(x, y) {
+            const rx = x / window.innerWidth;
+            const ry = y / window.innerHeight;
+            confetti({
+                particleCount: 50,
+                spread: 70,
+                origin: { x: rx, y: ry },
+                colors: ['#fbbf24', '#fef08a', '#ffffff'],
+                shapes: ['star'],
+                ticks: 300,
+                gravity: 1.2
+            });
+        }
+
+        // 初回ロード
+        window.addEventListener('load', () => {
+             loadBamboo('latest');
+        });
+
+    </script>
+</body>
+</html>
