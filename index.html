@@ -6,7 +6,6 @@
     <title>デジタル七夕</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <!-- Font Awesomeの導入 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* 夜空の背景 */
@@ -137,16 +136,20 @@
         <div id="wishes-layer" class="absolute inset-0 pointer-events-none z-10"></div>
     </div>
 
-    <!-- Font Awesome を使ったアイコンに変更 -->
     <button id="fab-pen" class="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-full flex justify-center items-center text-white text-2xl shadow-xl shadow-cyan-900/50 hover:scale-110 active:scale-95 transition-transform z-30 pointer-events-auto border-2 border-white/20">
         <i class="fa-solid fa-pen"></i>
     </button>
 
     <script>
-        const API_BASE_URL = '';
+        // ---- 設定 ----
+
+        // 短冊管理API
+        const API_BASE_URL = 'https://tanabata-2026.osudenken4dev.workers.dev';
+        
+        // 短冊の背景色
         const COLORS = ['#bfdbfe', '#fecaca', '#fef08a', '#f3f4f6', '#e9d5ff'];
         
-        // 枝の先端（スロット）の座標 (画面に対するパーセンテージ)
+        // 短冊のスロット位置（%）
         const SLOT_POSITIONS = [
             { x: 25, y: 15 }, { x: 75, y: 18 },
             { x: 15, y: 28 }, { x: 85, y: 32 },
@@ -155,6 +158,8 @@
             { x: 30, y: 68 }, { x: 70, y: 72 },
             { x: 20, y: 82 }, { x: 80, y: 85 }
         ];
+
+        // ---- ここまで ----
 
         let userToken = localStorage.getItem('user_token');
         if (!userToken) {
@@ -166,74 +171,22 @@
         let latestBambooId = 1;
         let currentWishes = [];
 
-        class MockAPI {
-            constructor() {
-                if (!localStorage.getItem('bamboo_latest_id')) {
-                    localStorage.setItem('bamboo_latest_id', '1');
-                    localStorage.setItem('bamboo_data_1', JSON.stringify([]));
-                }
-            }
-            async get(url) {
-                const idMatch = url.match(/id=([^&]+)/);
-                let id = idMatch ? idMatch[1] : 'latest';
-                let latestId = parseInt(localStorage.getItem('bamboo_latest_id'));
-                if (id === 'latest') id = latestId;
-                const data = JSON.parse(localStorage.getItem(`bamboo_data_${id}`) || '[]');
-                return { json: async () => ({ id: parseInt(id), wishes: data, latest_id: latestId }) };
-            }
-            async post(url, body) {
-                let latestId = parseInt(localStorage.getItem('bamboo_latest_id'));
-                let data = JSON.parse(localStorage.getItem(`bamboo_data_${latestId}`) || '[]');
-                if (data.some(w => w.slot_index === body.slot_index)) return { ok: false, json: async () => ({ error: "Slot taken" }) };
-                
-                if (data.length >= 12) {
-                    latestId++;
-                    data = [];
-                    localStorage.setItem('bamboo_latest_id', latestId.toString());
-                }
-                const newWish = { id: crypto.randomUUID(), ...body };
-                data.push(newWish);
-                localStorage.setItem(`bamboo_data_${latestId}`, JSON.stringify(data));
-                return { ok: true, json: async () => ({ success: true, bamboo_id: latestId, wish: newWish }) };
-            }
-            async delete(url, body) {
-                let data = JSON.parse(localStorage.getItem(`bamboo_data_${body.bamboo_id}`) || '[]');
-                const idx = data.findIndex(w => w.id === body.id);
-                if (idx !== -1 && data[idx].created_by === body.user_token) {
-                    data.splice(idx, 1);
-                    localStorage.setItem(`bamboo_data_${body.bamboo_id}`, JSON.stringify(data));
-                    return { ok: true, json: async () => ({ success: true }) };
-                }
-                return { ok: false, json: async () => ({ error: "Failed" }) };
-            }
-        }
-        const mockApi = new MockAPI();
-
         async function fetchAPI(method, endpoint, body = null) {
-            if (API_BASE_URL) {
-                const res = await fetch(API_BASE_URL + endpoint, {
-                    method,
-                    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-                    body: body ? JSON.stringify(body) : undefined
-                });
-                return res;
-            } else {
-                await new Promise(r => setTimeout(r, 200));
-                if (method === 'GET') return mockApi.get(endpoint);
-                if (method === 'POST') return mockApi.post(endpoint, body);
-                if (method === 'DELETE') return mockApi.delete(endpoint, body);
-            }
+            const res = await fetch(API_BASE_URL + endpoint, {
+                method,
+                headers: body ? { 'Content-Type': 'application/json' } : undefined,
+                body: body ? JSON.stringify(body) : undefined
+            });
+            return res;
         }
 
-        // --- 竹の豪華なSVG描画 (ピクセル座標計算により左上に飛ぶバグを解消) ---
         function drawBamboo() {
             const container = document.getElementById('bamboo-container');
             const svg = document.getElementById('bamboo-svg');
             
-            // 描画領域の実際のピクセルサイズを取得
             const width = container.clientWidth;
             const height = container.clientHeight;
-            if (width === 0 || height === 0) return; // コンテナがまだ描画されていない場合はスキップ
+            if (width === 0 || height === 0) return; 
 
             let svgContent = `
                 <defs>
@@ -253,7 +206,6 @@
                 </defs>
             `;
 
-            // 幹の描画 (ピクセル座標)
             const numNodes = 12;
             const trunkWidth = 20;
             const trunkX = width / 2;
@@ -262,48 +214,40 @@
                 const y1 = height * (i / numNodes);
                 const nodeHeight = height / numNodes;
                 
-                // 筒
                 svgContent += `<rect x="${trunkX - trunkWidth/2}" y="${y1}" width="${trunkWidth}" height="${nodeHeight}" fill="url(#trunk-grad)" />`;
                 
-                // 節
                 if (i > 0) {
                     svgContent += `<ellipse cx="${trunkX}" cy="${y1}" rx="${trunkWidth/2 + 2}" ry="4" fill="#14532d" />`;
                     svgContent += `<ellipse cx="${trunkX}" cy="${y1}" rx="${trunkWidth/2 + 1}" ry="2" fill="#4ade80" opacity="0.6" />`;
                 }
             }
 
-            // 笹の葉を描画する関数（細長いシュッとした形に修正）
             const createLeaf = (cx, cy, angle, scale) => {
-                // SVGのtranslateには単位なしの数値を渡すことで、パースエラーを防ぎます
                 return `<path d="M 0,0 C 15,-8 35,-5 45,0 C 35,5 15,8 0,0 Z" 
                               fill="url(#leaf-grad)" 
                               transform="translate(${cx}, ${cy}) rotate(${angle}) scale(${scale})" 
                               filter="url(#shadow)" />`;
             };
 
-            // 枝と葉っぱの描画
             SLOT_POSITIONS.forEach((pos, idx) => {
                 const startX = trunkX;
-                const startY = height * ((pos.y + 5) / 100); // 幹から少し下（節のあたり）を起点にする
+                const startY = height * ((pos.y + 5) / 100);
                 const targetX = width * (pos.x / 100);
                 const targetY = height * (pos.y / 100);
                 const isRight = targetX > startX;
                 
-                // 枝の曲線 (竹らしく、斜め上にしなってから少し垂れる軌道)
                 const cp1X = startX + (targetX - startX) * 0.3;
-                const cp1Y = startY - 20; // 一度上に持ち上がる
+                const cp1Y = startY - 20;
                 const cp2X = startX + (targetX - startX) * 0.7;
                 const cp2Y = targetY - 10;
                 
                 svgContent += `<path d="M ${startX},${startY} C ${cp1X},${cp1Y} ${cp2X},${cp2Y} ${targetX},${targetY}" 
                                      fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round" />`;
                 
-                // 葉っぱの配置 (枝の先端付近)
                 svgContent += createLeaf(targetX, targetY, isRight ? 20 : 160, 0.7);
                 svgContent += createLeaf(targetX - (isRight ? 15 : -15), targetY + 5, isRight ? 45 : 135, 0.8);
                 svgContent += createLeaf(targetX - (isRight ? 30 : -30), targetY - 5, isRight ? -10 : 190, 0.6);
                 
-                // 葉っぱの配置 (枝の中間付近)
                 const midX = startX + (targetX - startX) * 0.5;
                 const midY = startY + (targetY - startY) * 0.5;
                 svgContent += createLeaf(midX, midY, isRight ? 30 : 150, 0.5);
@@ -311,7 +255,6 @@
 
             svg.innerHTML = svgContent;
 
-            // スロットマーカーの初期化
             const layer = document.getElementById('wishes-layer');
             layer.querySelectorAll('.slot-marker').forEach(el => el.remove());
             
@@ -511,26 +454,30 @@
                     el.style.pointerEvents = 'none';
                     const color = el.style.backgroundColor;
                     
-                    const res = await fetchAPI('POST', '/api/wishes', {
-                        text, color, slot_index: closestSlot, user_token: userToken
-                    });
-                    const data = await res.json();
-                    
-                    if (data.success) {
-                        triggerStarfall(wakkaX, wakkaY);
+                    try {
+                        const res = await fetchAPI('POST', '/api/wishes', {
+                            text, color, slot_index: closestSlot, user_token: userToken
+                        });
+                        const data = await res.json();
                         
-                        el.dataset.fixed = 'true';
-                        el.dataset.id = data.wish.id;
-                        el.dataset.slot = closestSlot;
-                        el.style.pointerEvents = 'auto';
-                        
-                        currentWishes.push(data.wish);
+                        if (data.success) {
+                            triggerStarfall(wakkaX, wakkaY);
+                            
+                            el.dataset.fixed = 'true';
+                            el.dataset.id = data.wish.id;
+                            el.dataset.slot = closestSlot;
+                            el.style.pointerEvents = 'auto';
+                            
+                            currentWishes.push(data.wish);
 
-                        if (data.bamboo_id > currentBambooId) {
-                            latestBambooId = data.bamboo_id;
-                            setTimeout(() => loadBamboo(latestBambooId), 1500);
+                            if (data.bamboo_id > currentBambooId) {
+                                latestBambooId = data.bamboo_id;
+                                setTimeout(() => loadBamboo(latestBambooId), 1500);
+                            }
+                        } else {
+                            throw new Error("Failed to save");
                         }
-                    } else {
+                    } catch (e) {
                         el.style.left = `calc(50% - 2.25rem)`;
                         el.style.top = `40%`;
                         el.style.pointerEvents = 'auto';
@@ -553,14 +500,22 @@
                         el.style.opacity = '0';
                         el.style.transform = 'scale(0.8) translateY(20px)';
                         
-                        await fetchAPI('DELETE', '/api/wishes', {
-                            id: el.dataset.id,
-                            bamboo_id: currentBambooId,
-                            user_token: userToken
-                        });
-                        
-                        currentWishes = currentWishes.filter(w => w.id !== el.dataset.id);
-                        setTimeout(() => el.remove(), 300);
+                        try {
+                            await fetchAPI('DELETE', '/api/wishes', {
+                                id: el.dataset.id,
+                                bamboo_id: currentBambooId,
+                                user_token: userToken
+                            });
+                            
+                            currentWishes = currentWishes.filter(w => w.id !== el.dataset.id);
+                            setTimeout(() => el.remove(), 300);
+                        } catch (e) {
+                            // 失敗したら元に戻す
+                            el.style.opacity = '1';
+                            el.style.transform = 'none';
+                            el.style.left = `calc(${origPos.x}% - 2.25rem)`;
+                            el.style.top = `calc(${origPos.y}% - 0.5rem)`;
+                        }
                     } else {
                         el.style.left = `calc(${origPos.x}% - 2.25rem)`;
                         el.style.top = `calc(${origPos.y}% - 0.5rem)`;
@@ -589,7 +544,7 @@
 
                 setTimeout(() => {
                     layer.innerHTML = '';
-                    drawBamboo(); // SVGを描画（ピクセル計算）
+                    drawBamboo(); 
                     
                     currentWishes.forEach(wish => createWishElement(wish, false));
                     
@@ -619,7 +574,6 @@
             if (currentBambooId < latestBambooId) loadBamboo(currentBambooId + 1);
         });
 
-        // ウィンドウサイズが変わったらSVGを再計算して描画
         window.addEventListener('resize', () => {
             drawBamboo();
         });
@@ -638,7 +592,6 @@
             });
         }
 
-        // 初回ロード
         window.addEventListener('load', () => {
              loadBamboo('latest');
         });
