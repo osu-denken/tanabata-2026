@@ -26,10 +26,26 @@
         /* ドラッグ時の浮遊感 */
         .dragging {
             z-index: 100 !important;
-            transform: scale(1.1) rotate(-3deg);
+            transform: scale(1.1) rotate(-3deg) !important;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             transition: transform 0.1s;
         }
+
+        /* 短冊の揺れアニメーション */
+        @keyframes sway {
+            0% { transform: rotate(-4deg); }
+            100% { transform: rotate(4deg); }
+        }
+
+        /* 吊るされている（fixed=true）かつ、ドラッグ中ではない時に揺らす */
+        .tanzaku-el[data-fixed="true"]:not(.dragging) {
+            transform-origin: 50% -5px; /* ワッカの円の中心あたりを支点に設定 */
+            animation-name: sway;
+            animation-timing-function: ease-in-out;
+            animation-iteration-count: infinite;
+            animation-direction: alternate;
+        }
+        /* -------------------------------------- */
 
         /* 短冊の基本スタイル */
         .tanzaku-el {
@@ -279,6 +295,13 @@
             const isMine = isNew || wishData.created_by === userToken;
             el.dataset.owned = isMine.toString();
 
+            // 揺らぎを自然にするためのランダム設定
+            const randomDuration = 2.5 + Math.random() * 2; // 2.5秒〜4.5秒の周期
+            const randomDelay = -Math.random() * 5; // 初期の位相をずらすためマイナス値
+            el.style.animationDuration = `${randomDuration}s`;
+            el.style.animationDelay = `${randomDelay}s`;
+            // ----
+
             el.innerHTML = `
                 <div class="wakka-handle">
                     <div class="wakka-circle"></div>
@@ -510,7 +533,6 @@
                             currentWishes = currentWishes.filter(w => w.id !== el.dataset.id);
                             setTimeout(() => el.remove(), 300);
                         } catch (e) {
-                            // 失敗したら元に戻す
                             el.style.opacity = '1';
                             el.style.transform = 'none';
                             el.style.left = `calc(${origPos.x}% - 2.25rem)`;
