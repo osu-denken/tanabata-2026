@@ -45,25 +45,22 @@
             animation-iteration-count: infinite;
             animation-direction: alternate;
         }
-        /* -------------------------------------- */
 
         /* 短冊の基本スタイル */
         .tanzaku-el {
             position: absolute;
-            width: 4.5rem;
+            width: 5rem;
             height: 14rem;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
             align-items: center;
-            border-radius: 2px;
             transition: left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s;
         }
         
         /* ワッカ */
         .wakka-handle {
             width: 100%;
-            height: 2rem;
             position: relative;
             cursor: grab;
             display: flex;
@@ -76,8 +73,8 @@
             cursor: grabbing;
         }
         .wakka-circle {
-            width: 12px;
-            height: 12px;
+            width: 16px;
+            height: 16px;
             border: 2px solid #9ca3af;
             border-radius: 50%;
             background: transparent;
@@ -93,7 +90,7 @@
             background: transparent;
             text-align: start;
             font-size: 1.1rem;
-            overflow-x: auto;
+            overflow-x: hidden;
             overflow-y: hidden;
             line-height: 1.4;
             word-break: break-all;
