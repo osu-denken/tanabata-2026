@@ -358,12 +358,26 @@
                         });
                     }
                 }
-
+                
+                el.addEventListener('pointerdown', () => {
+                    highestZIndex++;
+                    // 短冊が枝のラッパー内にある場合は、ラッパーごとその枝を前面に出す
+                    if (el.parentElement && el.parentElement.classList.contains('html-branch-wrapper')) {
+                        el.parentElement.style.zIndex = highestZIndex;
+                    } else {
+                        // ラッパー外（ドラッグ中や新規作成時など）は直接Z-indexを上げる
+                        el.style.zIndex = highestZIndex;
+                    }
+                });
+                
                 bindDragEvents(el);
                 return el;
             }
 
             let activeDragEl = null;
+            
+            let highestZIndex = 50; // z-indexの初期最大値
+            
             let startClientX, startClientY;
             let startLeft, startTop;
 
@@ -465,7 +479,7 @@
 
                 document.querySelectorAll('.slot-marker').forEach((marker) => {
                     const idx = parseInt(marker.dataset.slotIndex);
-                    if (idx === closestSlot && minDistance < 40) {
+                    if (idx === closestSlot && minDistance < 60) {
                         marker.classList.add('active');
                     } else {
                         marker.classList.remove('active');
@@ -499,7 +513,7 @@
 
                 const isFixed = el.dataset.fixed === 'true';
                 
-                if (minDistance < 40 && closestSlot !== -1) {
+                if (minDistance < 60 && closestSlot !== -1) {
                     const text = el.querySelector('.tanzaku-input').innerText.trim();
                     
                     if (text === '') {
@@ -646,6 +660,7 @@
 
             window.addEventListener('resize', () => {
                 drawBamboo();
+                currentWishes.forEach(wish => createWishElement(wish, false));
             });
 
             function triggerStarfall(x, y) {
