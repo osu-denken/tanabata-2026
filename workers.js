@@ -5,6 +5,30 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+// NGワードの設定 (正規表現)
+const NG_PATTERNS = [
+  /死亡/i,
+  /重傷/i,
+  /殺害/i,
+  /傷害/i,
+  /暴力/i,
+  /童貞/i,
+  /死ね/i,
+  /殺す/i,
+  /セックス/i,
+  /ポルノ/i,
+  /レイプ/i,
+  /オナニー?/i,
+  /エッチ/i,
+  /風俗/i,
+  /sex/i,
+  /ちん(ぽ|こ|ちん)/i,
+  /お?まんこ/i,
+  /大麻/i,
+  /覚醒剤/i,
+  /麻薬/i,  
+];
+
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -38,6 +62,14 @@ export default {
       // 短冊を追加(吊るす) (POST /api/wishes)
       if (method === "POST" && url.pathname === "/api/wishes") {
         const { text, color, slot_index, user_token } = await request.json();
+        
+        // NGワード規制
+        const isNg = NG_PATTERNS.some(regex => regex.test(text));
+        if (isNg) {
+           return new Response(JSON.stringify({ success: false, error: "不適切な表現が含まれています。" }), {
+             status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS }
+           });
+        }
         
         let attempts = 0;
         const maxAttempts = 3; // 最大3回リトライする（排他制御）
