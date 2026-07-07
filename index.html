@@ -169,9 +169,9 @@
         <button id="btn-prev" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
             <i class="fa-solid fa-chevron-left mr-1"></i> 過去の竹
         </button>
-        <div class="text-xl font-bold bg-black/30 px-4 py-2 rounded-full backdrop-blur border border-white/10 shadow-lg">
+        <!-- <div class="text-xl font-bold bg-black/30 px-4 py-2 rounded-full backdrop-blur border border-white/10 shadow-lg">
             竹 <span id="lbl-bamboo-id">1</span>
-        </div>
+        </div> -->
         <button id="btn-next" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
             新しい竹 <i class="fa-solid fa-chevron-right ml-1"></i>
         </button>
@@ -600,7 +600,7 @@
                     
                     currentWishes.forEach(wish => createWishElement(wish, false));
                     
-                    document.getElementById('lbl-bamboo-id').innerText = currentBambooId;
+                    // document.getElementById('lbl-bamboo-id').innerText = currentBambooId;
                     
                     document.getElementById('btn-prev').disabled = (currentBambooId <= 1);
                     document.getElementById('btn-next').disabled = (currentBambooId >= latestBambooId);
