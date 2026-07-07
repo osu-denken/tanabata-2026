@@ -27,7 +27,8 @@
         .dragging {
             z-index: 100 !important;
             transform: scale(1.1) rotate(-3deg) !important;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            filter: drop-shadow(0 15px 15px rgba(0,0,0,0.6)) !important;
+            /* box-shadow: 0 10px 25px rgba(0,0,0,0.5); */
             transition: transform 0.1s;
         }
 
@@ -39,7 +40,7 @@
 
         /* 吊るされている（fixed=true）かつ、ドラッグ中ではない時に揺らす */
         .tanzaku-el[data-fixed="true"]:not(.dragging) {
-            transform-origin: 50% -5px; /* ワッカの円の中心あたりを支点に設定 */
+            transform-origin: 50% -32px; /* ワッカの円の中心あたりを支点に設定 */
             animation-name: sway;
             animation-timing-function: ease-in-out;
             animation-iteration-count: infinite;
@@ -48,6 +49,7 @@
 
         /* 短冊の基本スタイル */
         .tanzaku-el {
+            margin-top: 2.4rem;
             position: absolute;
             width: 5rem;
             height: 14rem;
@@ -56,32 +58,64 @@
             align-items: center;
             transition: left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s;
         }
+
+        /* 穴と3D立体交差の紐 */
         
-        /* ワッカ */
+        /* 紙本体（完全に透明な穴をくり抜く） */
+        .tanzaku-paper {
+            position: absolute;
+            inset: 0;
+            /* 穴の中心を上から16pxの位置、半径4pxでくり抜く */
+            -webkit-mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
+            mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
+            z-index: 2; /* 紙はレイヤー2 */
+        }
+
+        /* 紐のベーススタイル（楕円のリング） */
+        .koyori-loop {
+            position: absolute;
+            top: -32px;
+            /* left: calc(50% - 2px); */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 50px; /* 穴の下端（y=20px）まで届く高さ */
+            border: 2px solid #9c6d2f;
+            border-radius: 50%;
+            box-sizing: border-box;
+        }
+
+        /* 左半分（紙の裏側を通る） */
+        .koyori-loop.back {
+            z-index: 1; /* 紙(2)より奥 */
+            clip-path: inset(0 50% 0 0); /* 右半分を非表示にして、左半分だけにする */
+        }
+
+        /* 右半分（紙の手前を通る） */
+        .koyori-loop.front {
+            z-index: 3; /* 紙(2)より手前 */
+            clip-path: inset(0 0 0 50%); /* 左半分を非表示にして、右半分だけにする */
+        }
+
+        /* ドラッグ用の透明な判定エリア */
         .wakka-handle {
-            width: 100%;
-            position: relative;
+            position: absolute;
+            top: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 40px;
             cursor: grab;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding-top: 2px;
-            flex-shrink: 0;
+            z-index: 10;
         }
         .wakka-handle:active {
             cursor: grabbing;
         }
-        .wakka-circle {
-            width: 16px;
-            height: 16px;
-            border: 2px solid #9ca3af;
-            border-radius: 50%;
-            background: transparent;
-            position: absolute;
-            top: -8px;
-        }
         
         .tanzaku-input {
+            position: relative;
+            z-index: 4;
+            margin-top: 16px;
             flex-grow: 1;
             width: 100%;
             padding: 0.5rem 0.2rem;
@@ -283,7 +317,6 @@
         function createWishElement(wishData, isNew = false) {
             const el = document.createElement('div');
             el.className = 'tanzaku-el text-gray-900 pointer-events-auto';
-            el.style.backgroundColor = wishData.color;
             
             el.dataset.id = wishData.id || '';
             el.dataset.slot = wishData.slot_index !== undefined ? wishData.slot_index : '';
@@ -296,12 +329,13 @@
             const randomDelay = -Math.random() * 5; // 初期の位相をずらすためマイナス値
             el.style.animationDuration = `${randomDuration}s`;
             el.style.animationDelay = `${randomDelay}s`;
-            // ----
 
+            // ペーパー自体に色をつける
             el.innerHTML = `
-                <div class="wakka-handle">
-                    <div class="wakka-circle"></div>
-                </div>
+                <div class="koyori-loop back"></div>
+                <div class="tanzaku-paper" style="background-color: ${wishData.color};"></div>
+                <div class="koyori-loop front"></div>
+                <div class="wakka-handle"></div>
                 <div class="tanzaku-input vertical-text" ${(!isNew && !isMine) ? 'contenteditable="false"' : 'contenteditable="true"'} placeholder="願い事">${wishData.text || ''}</div>
             `;
 
@@ -399,7 +433,7 @@
         function checkHoverSlot(el) {
             const rect = el.getBoundingClientRect();
             const wakkaX = rect.left + rect.width / 2;
-            const wakkaY = rect.top + 8;
+            const wakkaY = rect.top - 5; 
 
             const container = document.getElementById('wishes-layer');
             const parentRect = container.getBoundingClientRect();
@@ -433,7 +467,7 @@
         async function handleDrop(el) {
             const rect = el.getBoundingClientRect();
             const wakkaX = rect.left + rect.width / 2;
-            const wakkaY = rect.top + 8;
+            const wakkaY = rect.top - 5;
 
             const container = document.getElementById('wishes-layer');
             const parentRect = container.getBoundingClientRect();
@@ -471,7 +505,7 @@
 
                 if (!isFixed) {
                     el.style.pointerEvents = 'none';
-                    const color = el.style.backgroundColor;
+                    const color = el.querySelector('.tanzaku-paper').style.backgroundColor;
                     
                     try {
                         const res = await fetchAPI('POST', '/api/wishes', {
