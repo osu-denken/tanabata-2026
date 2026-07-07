@@ -1,826 +1,671 @@
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>デジタル七夕 | 電子計算研究部</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* 風の周期を全体で統一して枝と短冊の揺れを同期させる */
-        :root {
-            --wind-cycle: 5s;
-        }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>デジタル七夕 | 電子計算研究部</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body class="text-white h-screen w-screen relative">
 
-        /* 夜空の背景 */
-        body {
-            background: radial-gradient(circle at bottom, #1e1b4b 0%, #0f172a 100%);
-            margin: 0;
-            overflow: hidden;
-            font-family: 'Noto Serif JP', serif;
-            touch-action: none;
-        }
-        
-        /* 縦書き設定 */
-        .vertical-text {
-            writing-mode: vertical-rl;
-            text-orientation: upright;
-        }
+        <!-- 流れ星 -->
+        <div class="shooting-star" style="top: -10%; left: 80%; animation: shooting 5s linear infinite 0s;"></div>
+        <div class="shooting-star" style="top: 10%; left: 50%; animation: shooting 5s linear infinite 2.2s;"></div>
+        <div class="shooting-star" style="top: -20%; left: 120%; animation: shooting 5s linear infinite 4.1s;"></div>
 
-        /* 流れ星 */
-        .shooting-star {
-            position: absolute;
-            width: 2px;
-            height: 80px;
-            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1));
-            opacity: 0;
-            z-index: 1;
-            pointer-events: none;
-        }
-        @keyframes shooting {
-            /* 右上から左下へ向かうため、45度回転させて左下に移動させる */
-            0% { transform: translate(0, 0) rotate(45deg); opacity: 1; }
-            20% { transform: translate(-100vw, 100vw) rotate(45deg); opacity: 0; }
-            100% { opacity: 0; }
-        }
+        <div class="fixed top-6 left-0 right-0 flex justify-between items-center px-6 z-20 pointer-events-none">
+            <button id="btn-prev" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
+                <i class="fa-solid fa-chevron-left mr-1"></i> 過去の竹
+            </button>
+            <!-- <div class="text-xl font-bold bg-black/30 px-4 py-2 rounded-full backdrop-blur border border-white/10 shadow-lg">
+                竹 <span id="lbl-bamboo-id">1</span>
+            </div> -->
+            <button id="btn-next" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
+                新しい竹 <i class="fa-solid fa-chevron-right ml-1"></i>
+            </button>
+        </div>
 
-        /* 枝の揺れアニメーション (風を受けて全体が右に少し傾く) */
-        .bamboo-branch {
-            animation: sway-branch var(--wind-cycle) ease-in-out infinite;
-        }
-        @keyframes sway-branch {
-            0%, 100% { transform: rotate(0deg); }
-            50% { transform: rotate(3deg); }
-        }
+        <div id="bamboo-container" class="absolute inset-0 max-w-3xl mx-auto">
+            <svg id="bamboo-svg" class="absolute inset-0 w-full h-full pointer-events-none z-0"></svg>
+            <div id="wishes-layer" class="absolute inset-0 pointer-events-none z-10"></div>
+        </div>
 
-        /* ドラッグ時の浮遊感 */
-        .dragging {
-            z-index: 100 !important;
-            transform: scale(1.1) rotate(-3deg) !important;
-            filter: drop-shadow(0 15px 15px rgba(0,0,0,0.6)) !important;
-            transition: transform 0.1s;
-        }
-
-        /* 短冊の基本スタイル */
-        .tanzaku-el {
-            margin-top: 2.4rem;
-            position: absolute;
-            width: 5rem;
-            height: 14rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            transition: left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s;
-        }
-
-        /* 短冊の揺れアニメーション（枝と同じ周期でさらに自身も揺れる） */
-        .tanzaku-el[data-fixed="true"]:not(.dragging) {
-            transform-origin: 50% -32px; /* ワッカの円の中心あたりを支点に設定 */
-            animation: sway-tanzaku var(--wind-cycle) ease-in-out infinite;
-        }
-        @keyframes sway-tanzaku {
-            0%, 100% { transform: rotate(-2deg); }
-            50% { transform: rotate(4deg); }
-        }
-
-        /* 穴と3D立体交差の紐 */
-        .tanzaku-paper {
-            position: absolute;
-            inset: 0;
-            -webkit-mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
-            mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
-            z-index: 2;
-        }
-        .koyori-loop {
-            position: absolute;
-            top: -32px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 12px;
-            height: 50px;
-            border: 2px solid #9c6d2f;
-            border-radius: 50%;
-            box-sizing: border-box;
-        }
-        .koyori-loop.back { z-index: 1; clip-path: inset(0 50% 0 0); }
-        .koyori-loop.front { z-index: 3; clip-path: inset(0 0 0 50%); }
-
-        .wakka-handle {
-            position: absolute;
-            top: -16px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 40px;
-            height: 40px;
-            cursor: grab;
-            z-index: 10;
-        }
-        .wakka-handle:active { cursor: grabbing; }
-        
-        .tanzaku-input {
-            position: relative;
-            z-index: 4;
-            margin-top: 16px;
-            flex-grow: 1;
-            width: 100%;
-            padding: 0.5rem 0.2rem;
-            outline: none;
-            background: transparent;
-            text-align: start;
-            font-size: 1.1rem;
-            overflow-x: hidden;
-            overflow-y: hidden;
-            line-height: 1.4;
-            word-break: break-all;
-            overflow-wrap: break-word;
-        }
-
-        /* 「★願う！」ボタン */
-        .star-btn {
-            position: absolute;
-            bottom: -24px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.4);
-            color: #fef08a;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 999px;
-            padding: 1px 4px;
-            font-size: 0.75rem;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            backdrop-filter: blur(4px);
-            transition: all 0.2s;
-            white-space: nowrap;
-            z-index: 10;
-            pointer-events: auto;
-        }
-        .star-btn:hover {
-            background: rgba(253, 224, 71, 0.3);
-            /* transform: translateX(-50%) scale(1.05); */
-        }
-        .star-btn:active { transform: translateX(-50%) scale(0.95); }
-        
-        /* 願った後のアクティブ状態 */
-        .star-btn.active {
-            background: rgba(253, 224, 71, 0.6);
-            color: #fff;
-            border-color: rgba(253, 224, 71, 0.8);
-            box-shadow: 0 0 10px rgba(253, 224, 71, 0.4);
-        }
-
-        /* スロットマーカー */
-        .slot-marker {
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            transform: translate(-50%, -50%) scale(0.5);
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s, transform 0.3s;
-            z-index: 20;
-        }
-        body.is-dragging .slot-marker.is-empty {
-            opacity: 0.4;
-            transform: translate(-50%, -50%) scale(0.8);
-            border: 2px dashed rgba(253, 224, 71, 0.5);
-        }
-        body.is-dragging .slot-marker.is-empty.active {
-            background: radial-gradient(circle, rgba(253, 224, 71, 0.8) 0%, rgba(253, 224, 71, 0) 70%);
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1.2);
-            border: none;
-            animation: pulse-glow 1s infinite alternate;
-        }
-        @keyframes pulse-glow {
-            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
-            100% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
-        }
-    </style>
-</head>
-<body class="text-white h-screen w-screen relative">
-
-    <!-- 流れ星 -->
-    <div class="shooting-star" style="top: -10%; left: 80%; animation: shooting 5s linear infinite 0s;"></div>
-    <div class="shooting-star" style="top: 10%; left: 50%; animation: shooting 5s linear infinite 2.2s;"></div>
-    <div class="shooting-star" style="top: -20%; left: 120%; animation: shooting 5s linear infinite 4.1s;"></div>
-
-    <div class="fixed top-6 left-0 right-0 flex justify-between items-center px-6 z-20 pointer-events-none">
-        <button id="btn-prev" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
-            <i class="fa-solid fa-chevron-left mr-1"></i> 過去の竹
+        <button id="fab-pen" class="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-full flex justify-center items-center text-white text-2xl shadow-xl shadow-cyan-900/50 active:scale-95 transition-transform z-30 pointer-events-auto border-2 border-white/20">
+            <i class="fa-solid fa-pen"></i>
         </button>
-        <!-- <div class="text-xl font-bold bg-black/30 px-4 py-2 rounded-full backdrop-blur border border-white/10 shadow-lg">
-            竹 <span id="lbl-bamboo-id">1</span>
-        </div> -->
-        <button id="btn-next" class="pointer-events-auto bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur transition-all disabled:opacity-20 disabled:cursor-not-allowed">
-            新しい竹 <i class="fa-solid fa-chevron-right ml-1"></i>
-        </button>
-    </div>
 
-    <div id="bamboo-container" class="absolute inset-0 max-w-3xl mx-auto">
-        <svg id="bamboo-svg" class="absolute inset-0 w-full h-full pointer-events-none z-0"></svg>
-        <div id="wishes-layer" class="absolute inset-0 pointer-events-none z-10"></div>
-    </div>
+        <script>
+            // ---- 設定 ----
 
-    <button id="fab-pen" class="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-full flex justify-center items-center text-white text-2xl shadow-xl shadow-cyan-900/50 active:scale-95 transition-transform z-30 pointer-events-auto border-2 border-white/20">
-        <i class="fa-solid fa-pen"></i>
-    </button>
-
-    <script>
-        // ---- 設定 ----
-
-        // 短冊管理API
-        const API_BASE_URL = 'https://tanabata-2026.osudenken4dev.workers.dev';
-        
-        // 短冊の背景色
-        const COLORS = ['#bfdbfe', '#fecaca', '#fef08a', '#f3f4f6', '#e9d5ff', '#bbf7d0'];
-        
-        // 短冊のスロット位置（%）
-        const SLOT_POSITIONS = [
-            { x: 25, y: 15 }, { x: 75, y: 18 },
-            { x: 15, y: 28 }, { x: 85, y: 32 },
-            { x: 28, y: 42 }, { x: 72, y: 45 },
-            { x: 18, y: 55 }, { x: 82, y: 58 },
-            { x: 30, y: 68 }, { x: 70, y: 72 },
-            { x: 20, y: 82 }, { x: 80, y: 85 }
-        ];
-
-        // ---- ここまで ----
-
-        let userToken = localStorage.getItem('user_token');
-        if (!userToken) {
-            userToken = crypto.randomUUID();
-            localStorage.setItem('user_token', userToken);
-        }
-
-        // 自分が「願う！」を押した短冊のIDリスト
-        let starredWishes = JSON.parse(localStorage.getItem('starred_wishes') || '[]');
-        
-        function toggleStarStorage(id) {
-            const index = starredWishes.indexOf(id);
-            if (index > -1) {
-                starredWishes.splice(index, 1);
-            } else {
-                starredWishes.push(id);
-            }
-            localStorage.setItem('starred_wishes', JSON.stringify(starredWishes));
-        }
-
-        let currentBambooId = 1;
-        let latestBambooId = 1;
-        let currentWishes = [];
-
-        async function fetchAPI(method, endpoint, body = null) {
-            const res = await fetch(API_BASE_URL + endpoint, {
-                method,
-                headers: body ? { 'Content-Type': 'application/json' } : undefined,
-                body: body ? JSON.stringify(body) : undefined
-            });
-            return res;
-        }
-
-        function drawBamboo() {
-            const container = document.getElementById('bamboo-container');
-            const svg = document.getElementById('bamboo-svg');
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-            if (width === 0 || height === 0) return; 
-
-            let svgContent = `
-                <defs>
-                    <linearGradient id="trunk-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stop-color="#064e3b" />
-                        <stop offset="25%" stop-color="#166534" />
-                        <stop offset="70%" stop-color="#22c55e" />
-                        <stop offset="100%" stop-color="#14532d" />
-                    </linearGradient>
-                    <linearGradient id="leaf-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stop-color="#22c55e" />
-                        <stop offset="100%" stop-color="#064e3b" />
-                    </linearGradient>
-                    <filter id="shadow">
-                        <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3" />
-                    </filter>
-                </defs>
-            `;
-
-            // 竹の高さ制限（画面の85%）と曲がりの計算
-            const maxHeight = height * 0.85;
-            const numNodes = 12; // 12固定
-            const trunkWidth = 20;
-            const trunkBaseX = width / 2;
-            const trunkStartY = height; // 一番下から描画開始
+            // 短冊管理API
+            const API_BASE_URL = 'https://tanabata-2026.osudenken4dev.workers.dev';
             
-            // 竹の幹の各ポイント（節）の座標を計算
-            const trunkPoints = [];
-            for (let i = 0; i <= numNodes; i++) {
-                // 上(0)から下(12)に向かって処理
-                const progress = 1 - (i / numNodes); // 上に行くほど1
-                const curveOffset = 30 * Math.pow(progress, 2); // 上に行くほど右に曲がる
-                const x = trunkBaseX + curveOffset;
-                const y = trunkStartY - maxHeight + maxHeight * (i / numNodes);
-                trunkPoints.push({ x, y });
-            }
-
-            // --- グラデーション（影）を追従させるため、節ごとに分けて描画 ---
-            for (let i = 0; i < numNodes; i++) {
-                const pt1 = trunkPoints[i];     // 節の上端
-                const pt2 = trunkPoints[i + 1]; // 節の下端
-                
-                const dx = pt2.x - pt1.x;
-                const dy = pt2.y - pt1.y;
-                const angleRad = Math.atan2(dy, dx);
-                const angleDeg = angleRad * (180 / Math.PI);
-                const segmentLength = Math.hypot(dx, dy);
-
-                // 垂直(90度)を基準に回転を調整
-                const rotation = angleDeg - 90;
-
-                // 各セグメントを回転させることで、線形グラデーションも一緒に回転する
-                svgContent += `<g transform="translate(${pt1.x}, ${pt1.y}) rotate(${rotation})">`;
-                // 継ぎ目の隙間をなくすため、長さに +2 余裕を持たせる
-                svgContent += `<rect x="${-trunkWidth/2}" y="0" width="${trunkWidth}" height="${segmentLength + 2}" fill="url(#trunk-grad)" />`;
-                svgContent += `</g>`;
-            }
-
-            // --- 節（ジョイント）の描画 ---
-            const nodeXPositions = []; // 枝の描画用に保存
-
-            // const jointCount = numNodes / 2;
-            for (let i = 0; i < numNodes; i++) {
-                const progress = 1 - ((i + 0.5) / numNodes);
-                const curveOffset = 30 * Math.pow(progress, 2);
-                nodeXPositions.push(trunkBaseX + curveOffset);
-            }
-
-            for (let i = 0; i < numNodes; i++) {
-                const pt = trunkPoints[i];
-                // 前後のポイントから幹の傾きを計算し、節の楕円をそれに合わせて回転させる
-
-               if (i % 2 === 1) continue
-
-                const prev = i === 0 ? trunkPoints[i] : trunkPoints[i - 1];
-                const next = trunkPoints[i + 1];
-                const angleRad = Math.atan2(next.y - prev.y, next.x - prev.x);
-                const angleDeg = angleRad * (180 / Math.PI);
-                const rotation = angleDeg - 90;
-
-                svgContent += `<g transform="translate(${pt.x}, ${pt.y}) rotate(${rotation})">`;
-                svgContent += `<ellipse cx="0" cy="0" rx="${trunkWidth/2 + 2}" ry="4" fill="#14532d" />`;
-                svgContent += `<ellipse cx="0" cy="0" rx="${trunkWidth/2 + 1}" ry="2" fill="#4ade80" opacity="0.6" />`;
-                svgContent += `</g>`;
-            }
-
-            const createLeaf = (cx, cy, angle, scale) => {
-                return `<path d="M 0,0 C 15,-8 35,-5 45,0 C 35,5 15,8 0,0 Z" 
-                              fill="url(#leaf-grad)" 
-                              transform="translate(${cx}, ${cy}) rotate(${angle}) scale(${scale})" 
-                              filter="url(#shadow)" />`;
-            };
-
-            // 枝の描画
-            SLOT_POSITIONS.forEach((pos, idx) => {
-                // スロットのY座標(%)から、対応する竹の節のだいたいの高さを逆算してX座標を取得
-                const targetYPercent = pos.y;
-                // 画面全体のY%を、幹の描画範囲のインデックスに変換
-                let nodeIndex = Math.floor((targetYPercent / 100) * numNodes);
-                if (nodeIndex >= numNodes) nodeIndex = numNodes - 1;
-                if (nodeIndex < 0) nodeIndex = 0;
-
-                const startX = nodeXPositions[nodeIndex];
-                const startY = height * ((pos.y + 5) / 100);
-                const targetX = width * (pos.x / 100);
-                const targetY = height * (pos.y / 100);
-                const isRight = targetX > startX;
-                
-                const cp1X = startX + (targetX - startX) * 0.3;
-                const cp1Y = startY - 20;
-                const cp2X = startX + (targetX - startX) * 0.7;
-                const cp2Y = targetY - 10;
-                
-                // 枝のアニメーションのために <g> タグでグループ化し、起点を設定
-                svgContent += `<g class="bamboo-branch" style="transform-origin: ${startX}px ${startY}px;">`;
-                
-                svgContent += `<path d="M ${startX},${startY} C ${cp1X},${cp1Y} ${cp2X},${cp2Y} ${targetX},${targetY}" 
-                                     fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round" />`;
-                
-                svgContent += createLeaf(targetX, targetY, isRight ? 20 : 160, 0.7);
-                svgContent += createLeaf(targetX - (isRight ? 15 : -15), targetY + 5, isRight ? 45 : 135, 0.8);
-                svgContent += createLeaf(targetX - (isRight ? 30 : -30), targetY - 5, isRight ? -10 : 190, 0.6);
-                
-                const midX = startX + (targetX - startX) * 0.5;
-                const midY = startY + (targetY - startY) * 0.5;
-                svgContent += createLeaf(midX, midY, isRight ? 30 : 150, 0.5);
-                
-                svgContent += `</g>`; // グループを閉じる
-            });
-
-            svg.innerHTML = svgContent;
-
-            const layer = document.getElementById('wishes-layer');
-            layer.querySelectorAll('.slot-marker').forEach(el => el.remove());
+            // 短冊の背景色
+            const COLORS = ['#bfdbfe', '#fecaca', '#fef08a', '#f3f4f6', '#e9d5ff', '#bbf7d0'];
             
-            SLOT_POSITIONS.forEach((pos, idx) => {
-                const marker = document.createElement('div');
-                marker.className = 'slot-marker';
-                marker.dataset.slotIndex = idx;
-                marker.style.left = `${pos.x}%`;
-                marker.style.top = `${pos.y}%`;
-                layer.appendChild(marker);
-            });
-        }
+            // 短冊のスロット位置（%）
+            const SLOT_POSITIONS = [
+                { x: 25, y: 15 }, { x: 75, y: 18 },
+                { x: 15, y: 28 }, { x: 85, y: 32 },
+                { x: 28, y: 42 }, { x: 72, y: 45 },
+                { x: 18, y: 55 }, { x: 82, y: 58 },
+                { x: 30, y: 68 }, { x: 70, y: 72 },
+                { x: 20, y: 82 }, { x: 80, y: 85 }
+            ];
 
-        function createWishElement(wishData, isNew = false) {
-            const el = document.createElement('div');
-            el.className = 'tanzaku-el text-gray-900 pointer-events-auto';
-            
-            el.dataset.id = wishData.id || '';
-            el.dataset.slot = wishData.slot_index !== undefined ? wishData.slot_index : '';
-            el.dataset.fixed = (!isNew).toString();
-            const isMine = isNew || wishData.created_by === userToken;
-            el.dataset.owned = isMine.toString();
+            // ---- ここまで ----
 
-            const stars = wishData.stars || 0;
-            // ローカルストレージを見て、自分がすでに願っているか確認
-            const isStarred = starredWishes.includes(wishData.id);
-            const btnClass = isStarred ? 'star-btn active' : 'star-btn';
-
-            let htmlContent = `
-                <div class="koyori-loop back"></div>
-                <div class="tanzaku-paper" style="background-color: ${wishData.color};"></div>
-                <div class="koyori-loop front"></div>
-                <div class="wakka-handle"></div>
-                <div class="tanzaku-input vertical-text" ${(!isNew && !isMine) ? 'contenteditable="false"' : 'contenteditable="true"'} placeholder="願い事">${wishData.text || ''}</div>
-            `;
-            
-            // 吊るし済みの短冊に「★願う！」ボタンを追加
-            if (!isNew) {
-                htmlContent += `<button class="${btnClass}" data-id="${wishData.id}">
-                                    <i class="fa-solid fa-star"></i> 願う！ <span class="star-count">${stars}</span>
-                                </button>`;
-            }
-            
-            el.innerHTML = htmlContent;
-
-            if (!isNew && wishData.slot_index !== undefined) {
-                const pos = SLOT_POSITIONS[wishData.slot_index];
-                el.style.left = `calc(${pos.x}% - 2.25rem)`;
-                el.style.top = `calc(${pos.y}% - 0.5rem)`;
-            } else {
-                el.style.left = `calc(50% - 2.25rem)`;
-                el.style.top = `40%`;
-                el.style.zIndex = '50';
+            let userToken = localStorage.getItem('user_token');
+            if (!userToken) {
+                userToken = crypto.randomUUID();
+                localStorage.setItem('user_token', userToken);
             }
 
-            document.getElementById('wishes-layer').appendChild(el);
+            // 自分が「願う！」を押した短冊のIDリスト
+            let starredWishes = JSON.parse(localStorage.getItem('starred_wishes') || '[]');
             
-            if (isNew) {
-                setTimeout(() => el.querySelector('.tanzaku-input').focus(), 50);
+            function toggleStarStorage(id) {
+                const index = starredWishes.indexOf(id);
+                if (index > -1) {
+                    starredWishes.splice(index, 1);
+                } else {
+                    starredWishes.push(id);
+                }
+                localStorage.setItem('starred_wishes', JSON.stringify(starredWishes));
             }
 
-            // 「★願う！」ボタンのイベントリスナー
-            if (!isNew) {
-                const starBtn = el.querySelector('.star-btn');
-                if (starBtn) {
-                    starBtn.addEventListener('click', async (e) => {
-                        e.stopPropagation(); // ドラッグ開始のイベントが発火するのを防ぐ
-                        const countSpan = starBtn.querySelector('.star-count');
-                        
-                        // 現在の状態から追加か解除かを判定
-                        const currentlyStarred = starBtn.classList.contains('active');
-                        const action = currentlyStarred ? 'remove' : 'add';
-                        
-                        // 更新
-                        if (action === 'add') {
-                            countSpan.innerText = parseInt(countSpan.innerText) + 1;
-                            starBtn.classList.add('active');
-                            toggleStarStorage(el.dataset.id);
-                            // triggerStarfall(e.clientX, e.clientY); // 星が降るエフェクト
-                        } else {
-                            countSpan.innerText = Math.max(0, parseInt(countSpan.innerText) - 1);
-                            starBtn.classList.remove('active');
-                            toggleStarStorage(el.dataset.id);
-                        }
+            let currentBambooId = 1;
+            let latestBambooId = 1;
+            let currentWishes = [];
 
-                        try {
-                            const res = await fetchAPI('POST', '/api/wishes/star', {
-                                id: el.dataset.id,
-                                bamboo_id: currentBambooId,
-                                action: action
-                            });
-                            const data = await res.json();
-                            if (!data.success) throw new Error("API Error");
-                        } catch (err) {
-                            // 失敗したら元に戻す
+            async function fetchAPI(method, endpoint, body = null) {
+                const res = await fetch(API_BASE_URL + endpoint, {
+                    method,
+                    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+                    body: body ? JSON.stringify(body) : undefined
+                });
+                return res;
+            }
+
+            function drawBamboo() {
+                const container = document.getElementById('bamboo-container');
+                const svg = document.getElementById('bamboo-svg');
+                const layer = document.getElementById('wishes-layer');
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                if (width === 0 || height === 0) return; 
+
+                // 一旦クリア
+                layer.innerHTML = '';
+                
+                let svgContent = `
+                    <defs>
+                        <linearGradient id="trunk-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#064e3b" />
+                            <stop offset="25%" stop-color="#166534" />
+                            <stop offset="70%" stop-color="#22c55e" />
+                            <stop offset="100%" stop-color="#14532d" />
+                        </linearGradient>
+                        <linearGradient id="leaf-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#22c55e" />
+                            <stop offset="100%" stop-color="#064e3b" />
+                        </linearGradient>
+                        <filter id="shadow">
+                            <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3" />
+                        </filter>
+                    </defs>
+                `;
+
+                // 竹の高さ制限（画面の85%）と曲がりの計算
+                const maxHeight = height * 0.85;
+                const numNodes = 12;
+                const trunkWidth = 20;
+                const trunkBaseX = width / 2;
+                const trunkStartY = height; // 一番下から描画開始
+                
+                // 竹の幹の各ポイント（節）の座標を計算
+                const trunkPoints = [];
+                for (let i = 0; i <= numNodes; i++) {
+                    // 上(0)から下(12)に向かって処理
+                    const progress = 1 - (i / numNodes); // 上に行くほど1
+                    const curveOffset = 30 * Math.pow(progress, 2); // 上に行くほど右に曲がる
+                    const x = trunkBaseX + curveOffset;
+                    const y = trunkStartY - maxHeight + maxHeight * (i / numNodes);
+                    trunkPoints.push({ x, y });
+                }
+
+                // --- グラデーション（影）を追従させるため、節ごとに分けて描画 ---
+                for (let i = 0; i < numNodes; i++) {
+                    const pt1 = trunkPoints[i];     // 節の上端
+                    const pt2 = trunkPoints[i + 1]; // 節の下端
+                    
+                    const dx = pt2.x - pt1.x;
+                    const dy = pt2.y - pt1.y;
+                    const angleRad = Math.atan2(dy, dx);
+                    const angleDeg = angleRad * (180 / Math.PI);
+                    const segmentLength = Math.hypot(dx, dy);
+
+                    // 垂直(90度)を基準に回転を調整
+                    const rotation = angleDeg - 90;
+
+                    // 各セグメントを回転させることで、線形グラデーションも一緒に回転する
+                    svgContent += `<g transform="translate(${pt1.x}, ${pt1.y}) rotate(${rotation})">`;
+                    // 継ぎ目の隙間をなくすため、長さに +2 余裕を持たせる
+                    svgContent += `<rect x="${-trunkWidth/2}" y="0" width="${trunkWidth}" height="${segmentLength + 2}" fill="url(#trunk-grad)" />`;
+                    svgContent += `</g>`;
+                }
+
+                // --- 節（ジョイント）の描画 ---
+                const nodeXPositions = []; // 枝の描画用に保存
+
+                // const jointCount = numNodes / 2;
+                for (let i = 0; i < numNodes; i++) {
+                    const progress = 1 - ((i + 0.5) / numNodes);
+                    const curveOffset = 30 * Math.pow(progress, 2);
+                    nodeXPositions.push(trunkBaseX + curveOffset);
+                }
+
+                for (let i = 0; i < numNodes; i++) {
+                    const pt = trunkPoints[i];
+                    // 前後のポイントから幹の傾きを計算し、節の楕円をそれに合わせて回転させる
+
+                if (i % 2 === 1) continue
+
+                    const prev = i === 0 ? trunkPoints[i] : trunkPoints[i - 1];
+                    const next = trunkPoints[i + 1];
+                    const angleRad = Math.atan2(next.y - prev.y, next.x - prev.x);
+                    const angleDeg = angleRad * (180 / Math.PI);
+                    const rotation = angleDeg - 90;
+
+                    svgContent += `<g transform="translate(${pt.x}, ${pt.y}) rotate(${rotation})">`;
+                    svgContent += `<ellipse cx="0" cy="0" rx="${trunkWidth/2 + 2}" ry="4" fill="#14532d" />`;
+                    svgContent += `<ellipse cx="0" cy="0" rx="${trunkWidth/2 + 1}" ry="2" fill="#4ade80" opacity="0.6" />`;
+                    svgContent += `</g>`;
+                }
+
+                const createLeaf = (cx, cy, angle, scale) => {
+                    return `<path d="M 0,0 C 15,-8 35,-5 45,0 C 35,5 15,8 0,0 Z" 
+                                fill="url(#leaf-grad)" 
+                                transform="translate(${cx}, ${cy}) rotate(${angle}) scale(${scale})" 
+                                filter="url(#shadow)" />`;
+                };
+
+                // 枝の描画
+                SLOT_POSITIONS.forEach((pos, idx) => {
+                    // スロットのY座標(%)から、対応する竹の節のだいたいの高さを逆算してX座標を取得
+                    const targetYPercent = pos.y;
+                    // 画面全体のY%を、幹の描画範囲のインデックスに変換
+                    let nodeIndex = Math.floor((targetYPercent / 100) * numNodes);
+                    if (nodeIndex >= numNodes) nodeIndex = numNodes - 1;
+                    if (nodeIndex < 0) nodeIndex = 0;
+
+                    const startX = nodeXPositions[nodeIndex];
+                    const startY = height * ((pos.y + 5) / 100);
+                    const targetX = width * (pos.x / 100);
+                    const targetY = height * (pos.y / 100);
+                    const isRight = targetX > startX;
+                    
+                    const cp1X = startX + (targetX - startX) * 0.3;
+                    const cp1Y = startY - 20;
+                    const cp2X = startX + (targetX - startX) * 0.7;
+                    const cp2Y = targetY - 10;
+                    
+                    // 枝のアニメーションのために <g> タグでグループ化し、起点を設定
+                    svgContent += `<g class="bamboo-branch" style="transform-origin: ${startX}px ${startY}px;">`;
+                    
+                    svgContent += `<path d="M ${startX},${startY} C ${cp1X},${cp1Y} ${cp2X},${cp2Y} ${targetX},${targetY}" 
+                                        fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round" />`;
+                    
+                    svgContent += createLeaf(targetX, targetY, isRight ? 20 : 160, 0.7);
+                    svgContent += createLeaf(targetX - (isRight ? 15 : -15), targetY + 5, isRight ? 45 : 135, 0.8);
+                    svgContent += createLeaf(targetX - (isRight ? 30 : -30), targetY - 5, isRight ? -10 : 190, 0.6);
+                    
+                    const midX = startX + (targetX - startX) * 0.5;
+                    const midY = startY + (targetY - startY) * 0.5;
+                    svgContent += createLeaf(midX, midY, isRight ? 30 : 150, 0.5);
+                    svgContent += `</g>`;
+
+                    // HTML側の枝のアニメーションを継承するラッパー
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'html-branch-wrapper pointer-events-none';
+                    wrapper.dataset.slotIndex = idx;
+                    wrapper.style.left = `${startX}px`;
+                    wrapper.style.top = `${startY}px`;
+                    wrapper.style.transformOrigin = `0 0`; // 枝の根元を起点にする
+
+                    // ラッパー内での相対座標
+                    const relX = targetX - startX;
+                    const relY = targetY - startY;
+                    wrapper.dataset.relX = relX;
+                    wrapper.dataset.relY = relY;
+
+                    // スロットマーカーもラッパー内に配置
+                    const marker = document.createElement('div');
+                    marker.className = 'slot-marker';
+                    marker.dataset.slotIndex = idx;
+                    marker.style.left = `${relX}px`;
+                    marker.style.top = `${relY}px`;
+                    wrapper.appendChild(marker);
+
+                    layer.appendChild(wrapper);
+                });
+
+                svg.innerHTML = svgContent;
+            }
+
+            function createWishElement(wishData, isNew = false) {
+                const el = document.createElement('div');
+                el.className = 'tanzaku-el text-gray-900 pointer-events-auto';
+                
+                el.dataset.id = wishData.id || '';
+                el.dataset.slot = wishData.slot_index !== undefined ? wishData.slot_index : '';
+                el.dataset.fixed = (!isNew).toString();
+                const isMine = isNew || wishData.created_by === userToken;
+                el.dataset.owned = isMine.toString();
+
+                const stars = wishData.stars || 0;
+                // ローカルストレージを見て、自分がすでに願っているか確認
+                const isStarred = starredWishes.includes(wishData.id);
+                const btnClass = isStarred ? 'star-btn active' : 'star-btn';
+
+                let htmlContent = `
+                    <div class="koyori-loop back"></div>
+                    <div class="tanzaku-paper" style="background-color: ${wishData.color};"></div>
+                    <div class="koyori-loop front"></div>
+                    <div class="wakka-handle"></div>
+                    <div class="tanzaku-input vertical-text" ${(!isNew && !isMine) ? 'contenteditable="false"' : 'contenteditable="true"'} placeholder="願い事">${wishData.text || ''}</div>
+                `;
+                
+                // 吊るし済みの短冊に「★願う！」ボタンを追加
+                if (!isNew) {
+                    htmlContent += `<button class="${btnClass}" data-id="${wishData.id}">
+                                        <i class="fa-solid fa-star"></i> 願う！ <span class="star-count">${stars}</span>
+                                    </button>`;
+                }
+                
+                el.innerHTML = htmlContent;
+
+                if (!isNew && wishData.slot_index !== undefined) {
+                    // 枝のラッパー内に配置することでアニメーションを同期
+                    const wrapper = document.querySelector(`.html-branch-wrapper[data-slot-index="${wishData.slot_index}"]`);
+                    if (wrapper) {
+                        wrapper.appendChild(el);
+                        const relX = parseFloat(wrapper.dataset.relX);
+                        const relY = parseFloat(wrapper.dataset.relY);
+                        el.style.left = `calc(${relX}px - 2.25rem)`;
+                        el.style.top = `calc(${relY}px - 0.5rem)`;
+                    } else {
+                        document.getElementById('wishes-layer').appendChild(el);
+                    }
+                } else {
+                    document.getElementById('wishes-layer').appendChild(el);
+                    el.style.left = `calc(50% - 2.25rem)`;
+                    el.style.top = `40%`;
+                    el.style.zIndex = '50';
+                }
+
+                if (isNew) {
+                    setTimeout(() => el.querySelector('.tanzaku-input').focus(), 50);
+                }
+
+                // 「★願う！」ボタンのイベントリスナー
+                if (!isNew) {
+                    const starBtn = el.querySelector('.star-btn');
+                    if (starBtn) {
+                        starBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation(); // ドラッグ開始のイベントが発火するのを防ぐ
+                            const countSpan = starBtn.querySelector('.star-count');
+                            
+                            // 現在の状態から追加か解除かを判定
+                            const currentlyStarred = starBtn.classList.contains('active');
+                            const action = currentlyStarred ? 'remove' : 'add';
+                            
+                            // 更新
                             if (action === 'add') {
-                                countSpan.innerText = Math.max(0, parseInt(countSpan.innerText) - 1);
-                                starBtn.classList.remove('active');
-                            } else {
                                 countSpan.innerText = parseInt(countSpan.innerText) + 1;
                                 starBtn.classList.add('active');
+                                toggleStarStorage(el.dataset.id);
+                                // triggerStarfall(e.clientX, e.clientY); // 星が降るエフェクト
+                            } else {
+                                countSpan.innerText = Math.max(0, parseInt(countSpan.innerText) - 1);
+                                starBtn.classList.remove('active');
+                                toggleStarStorage(el.dataset.id);
                             }
-                            toggleStarStorage(el.dataset.id);
-                            console.error("Star update failed:", err);
-                        }
-                    });
+
+                            try {
+                                const res = await fetchAPI('POST', '/api/wishes/star', {
+                                    id: el.dataset.id,
+                                    bamboo_id: currentBambooId,
+                                    action: action
+                                });
+                                const data = await res.json();
+                                if (!data.success) throw new Error("API Error");
+                            } catch (err) {
+                                // 失敗したら元に戻す
+                                if (action === 'add') {
+                                    countSpan.innerText = Math.max(0, parseInt(countSpan.innerText) - 1);
+                                    starBtn.classList.remove('active');
+                                } else {
+                                    countSpan.innerText = parseInt(countSpan.innerText) + 1;
+                                    starBtn.classList.add('active');
+                                }
+                                toggleStarStorage(el.dataset.id);
+                                console.error("Star update failed:", err);
+                            }
+                        });
+                    }
                 }
+
+                bindDragEvents(el);
+                return el;
             }
 
-            bindDragEvents(el);
-            return el;
-        }
+            let activeDragEl = null;
+            let startClientX, startClientY;
+            let startLeft, startTop;
 
-        let activeDragEl = null;
-        let startClientX, startClientY;
-        let startLeft, startTop;
-
-        function bindDragEvents(el) {
-            const handle = el.querySelector('.wakka-handle');
-            
-            handle.addEventListener('pointerdown', (e) => {
-                if (el.dataset.fixed === 'true' && el.dataset.owned !== 'true') return;
-
-                activeDragEl = el;
-                startClientX = e.clientX;
-                startClientY = e.clientY;
+            function bindDragEvents(el) {
+                const handle = el.querySelector('.wakka-handle');
                 
-                el.style.transition = 'none';
-                const rect = el.getBoundingClientRect();
-                const parentRect = document.getElementById('wishes-layer').getBoundingClientRect();
-                
-                startLeft = rect.left - parentRect.left;
-                startTop = rect.top - parentRect.top;
-                
-                el.style.left = startLeft + 'px';
-                el.style.top = startTop + 'px';
-                
-                el.classList.add('dragging');
-                handle.setPointerCapture(e.pointerId);
-                e.preventDefault();
+                handle.addEventListener('pointerdown', (e) => {
+                    if (el.dataset.fixed === 'true' && el.dataset.owned !== 'true') return;
 
-                document.querySelectorAll('.slot-marker').forEach(marker => {
-                    const idx = parseInt(marker.dataset.slotIndex);
-                    const isEmpty = el.dataset.slot == idx || !currentWishes.some(w => w.slot_index === idx);
-                    if (isEmpty) {
-                        marker.classList.add('is-empty');
-                    } else {
-                        marker.classList.remove('is-empty');
-                    }
-                });
-                
-                document.body.classList.add('is-dragging');
-                
-                checkHoverSlot(el);
-            });
-
-            handle.addEventListener('pointermove', (e) => {
-                if (activeDragEl !== el) return;
-                const dx = e.clientX - startClientX;
-                const dy = e.clientY - startClientY;
-                el.style.left = (startLeft + dx) + 'px';
-                el.style.top = (startTop + dy) + 'px';
-                
-                checkHoverSlot(el);
-            });
-
-            handle.addEventListener('pointerup', async (e) => {
-                if (activeDragEl !== el) return;
-                activeDragEl = null;
-                handle.releasePointerCapture(e.pointerId);
-                
-                el.classList.remove('dragging');
-                el.style.transition = 'left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s';
-                
-                document.body.classList.remove('is-dragging');
-                document.querySelectorAll('.slot-marker').forEach(m => {
-                    m.classList.remove('active');
-                    m.classList.remove('is-empty');
-                });
-
-                await handleDrop(el);
-            });
-        }
-
-        function checkHoverSlot(el) {
-            const rect = el.getBoundingClientRect();
-            const wakkaX = rect.left + rect.width / 2;
-            const wakkaY = rect.top - 5; 
-
-            const container = document.getElementById('wishes-layer');
-            const parentRect = container.getBoundingClientRect();
-            
-            let closestSlot = -1;
-            let minDistance = 9999;
-
-            SLOT_POSITIONS.forEach((pos, idx) => {
-                if (currentWishes.some(w => w.slot_index === idx) && el.dataset.slot != idx) return;
-
-                const sx = parentRect.left + parentRect.width * (pos.x / 100);
-                const sy = parentRect.top + parentRect.height * (pos.y / 100);
-                
-                const dist = Math.hypot(wakkaX - sx, wakkaY - sy);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestSlot = idx;
-                }
-            });
-
-            document.querySelectorAll('.slot-marker').forEach((marker) => {
-                const idx = parseInt(marker.dataset.slotIndex);
-                if (idx === closestSlot && minDistance < 40) {
-                    marker.classList.add('active');
-                } else {
-                    marker.classList.remove('active');
-                }
-            });
-        }
-
-        async function handleDrop(el) {
-            const rect = el.getBoundingClientRect();
-            const wakkaX = rect.left + rect.width / 2;
-            const wakkaY = rect.top - 5;
-
-            const container = document.getElementById('wishes-layer');
-            const parentRect = container.getBoundingClientRect();
-            
-            let closestSlot = -1;
-            let minDistance = 9999;
-
-            SLOT_POSITIONS.forEach((pos, idx) => {
-                if (currentWishes.some(w => w.slot_index === idx) && el.dataset.slot != idx) return;
-
-                const sx = parentRect.left + parentRect.width * (pos.x / 100);
-                const sy = parentRect.top + parentRect.height * (pos.y / 100);
-                
-                const dist = Math.hypot(wakkaX - sx, wakkaY - sy);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestSlot = idx;
-                }
-            });
-
-            const isFixed = el.dataset.fixed === 'true';
-            
-            if (minDistance < 40 && closestSlot !== -1) {
-                const text = el.querySelector('.tanzaku-input').innerText.trim();
-                
-                if (text === '') {
-                    el.style.opacity = '0';
-                    setTimeout(() => el.remove(), 300);
-                    return;
-                }
-
-                const pos = SLOT_POSITIONS[closestSlot];
-                el.style.left = `calc(${pos.x}% - 2.25rem)`;
-                el.style.top = `calc(${pos.y}% - 0.5rem)`;
-
-                if (!isFixed) {
-                    el.style.pointerEvents = 'none';
-                    const color = el.querySelector('.tanzaku-paper').style.backgroundColor;
+                    activeDragEl = el;
+                    startClientX = e.clientX;
+                    startClientY = e.clientY;
                     
-                    try {
-                        const res = await fetchAPI('POST', '/api/wishes', {
-                            text, color, slot_index: closestSlot, user_token: userToken
-                        });
-                        const data = await res.json();
-                        
-                        if (data.success) {
-                            triggerStarfall(wakkaX, wakkaY);
-                            
-                            // 保存成功後、短冊の見た目を更新（★ボタンを追加するため再生成）
-                            el.remove();
-                            currentWishes.push(data.wish);
-                            createWishElement(data.wish, false);
+                    el.style.transition = 'none';
+                    
+                    // 現在の画面上の絶対座標を取得
+                    const rect = el.getBoundingClientRect();
+                    const parentRect = document.getElementById('wishes-layer').getBoundingClientRect();
+                    
+                    startLeft = rect.left - parentRect.left;
+                    startTop = rect.top - parentRect.top;
+                    
+                    // ラッパー内にいる場合、ドラッグ中は一時的に外(トップレベル)に出して座標系を合わせる
+                    if (el.parentElement.classList.contains('html-branch-wrapper')) {
+                        document.getElementById('wishes-layer').appendChild(el);
+                    }
+                    
+                    el.style.left = startLeft + 'px';
+                    el.style.top = startTop + 'px';
+                    
+                    el.classList.add('dragging');
+                    handle.setPointerCapture(e.pointerId);
+                    e.preventDefault();
 
-                            if (data.bamboo_id > currentBambooId) {
-                                latestBambooId = data.bamboo_id;
-                                setTimeout(() => loadBamboo(latestBambooId), 1500);
-                            }
+                    document.querySelectorAll('.slot-marker').forEach(marker => {
+                        const idx = parseInt(marker.dataset.slotIndex);
+                        const isEmpty = el.dataset.slot == idx || !currentWishes.some(w => w.slot_index === idx);
+                        if (isEmpty) {
+                            marker.classList.add('is-empty');
                         } else {
-                            throw new Error("Failed to save");
+                            marker.classList.remove('is-empty');
                         }
-                    } catch (e) {
-                        el.style.left = `calc(50% - 2.25rem)`;
-                        el.style.top = `40%`;
-                        el.style.pointerEvents = 'auto';
-                        alert("吊るすのに失敗しました。別の場所をお試しください。");
-                    }
-                } else if (isFixed && el.dataset.slot != closestSlot) {
-                    const origPos = SLOT_POSITIONS[el.dataset.slot];
-                    el.style.left = `calc(${origPos.x}% - 2.25rem)`;
-                    el.style.top = `calc(${origPos.y}% - 0.5rem)`;
-                }
-
-            } else {
-                if (isFixed) {
-                    const origPos = SLOT_POSITIONS[el.dataset.slot];
-                    const osx = parentRect.left + parentRect.width * (origPos.x / 100);
-                    const osy = parentRect.top + parentRect.height * (origPos.y / 100);
-                    const distFromOrig = Math.hypot(wakkaX - osx, wakkaY - osy);
+                    });
                     
-                    if (distFromOrig > 50) {
-                        el.style.opacity = '0';
-                        el.style.transform = 'scale(0.8) translateY(20px)';
-                        
-                        try {
-                            await fetchAPI('DELETE', '/api/wishes', {
-                                id: el.dataset.id,
-                                bamboo_id: currentBambooId,
-                                user_token: userToken
-                            });
-                            
-                            currentWishes = currentWishes.filter(w => w.id !== el.dataset.id);
-                            setTimeout(() => el.remove(), 300);
-                        } catch (e) {
-                            el.style.opacity = '1';
-                            el.style.transform = 'none';
-                            el.style.left = `calc(${origPos.x}% - 2.25rem)`;
-                            el.style.top = `calc(${origPos.y}% - 0.5rem)`;
-                        }
-                    } else {
-                        el.style.left = `calc(${origPos.x}% - 2.25rem)`;
-                        el.style.top = `calc(${origPos.y}% - 0.5rem)`;
+                    document.body.classList.add('is-dragging');
+                    checkHoverSlot(el);
+                });
+
+                handle.addEventListener('pointermove', (e) => {
+                    if (activeDragEl !== el) return;
+                    const dx = e.clientX - startClientX;
+                    const dy = e.clientY - startClientY;
+                    el.style.left = (startLeft + dx) + 'px';
+                    el.style.top = (startTop + dy) + 'px';
+                    checkHoverSlot(el);
+                });
+
+                handle.addEventListener('pointerup', async (e) => {
+                    if (activeDragEl !== el) return;
+                    activeDragEl = null;
+                    handle.releasePointerCapture(e.pointerId);
+                    
+                    el.classList.remove('dragging');
+                    el.style.transition = 'left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s';
+                    
+                    document.body.classList.remove('is-dragging');
+                    document.querySelectorAll('.slot-marker').forEach(m => {
+                        m.classList.remove('active');
+                        m.classList.remove('is-empty');
+                    });
+
+                    await handleDrop(el);
+                });
+            }
+
+            function checkHoverSlot(el) {
+                const rect = el.getBoundingClientRect();
+                const wakkaX = rect.left + rect.width / 2;
+                const wakkaY = rect.top - 5; 
+
+                const container = document.getElementById('wishes-layer');
+                const parentRect = container.getBoundingClientRect();
+                
+                let closestSlot = -1;
+                let minDistance = 9999;
+
+                SLOT_POSITIONS.forEach((pos, idx) => {
+                    if (currentWishes.some(w => w.slot_index === idx) && el.dataset.slot != idx) return;
+
+                    const sx = parentRect.left + parentRect.width * (pos.x / 100);
+                    const sy = parentRect.top + parentRect.height * (pos.y / 100);
+                    
+                    const dist = Math.hypot(wakkaX - sx, wakkaY - sy);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestSlot = idx;
                     }
-                } else {
+                });
+
+                document.querySelectorAll('.slot-marker').forEach((marker) => {
+                    const idx = parseInt(marker.dataset.slotIndex);
+                    if (idx === closestSlot && minDistance < 40) {
+                        marker.classList.add('active');
+                    } else {
+                        marker.classList.remove('active');
+                    }
+                });
+            }
+
+            async function handleDrop(el) {
+                const rect = el.getBoundingClientRect();
+                const wakkaX = rect.left + rect.width / 2;
+                const wakkaY = rect.top - 5;
+
+                const container = document.getElementById('wishes-layer');
+                const parentRect = container.getBoundingClientRect();
+                
+                let closestSlot = -1;
+                let minDistance = 9999;
+
+                SLOT_POSITIONS.forEach((pos, idx) => {
+                    if (currentWishes.some(w => w.slot_index === idx) && el.dataset.slot != idx) return;
+
+                    const sx = parentRect.left + parentRect.width * (pos.x / 100);
+                    const sy = parentRect.top + parentRect.height * (pos.y / 100);
+                    
+                    const dist = Math.hypot(wakkaX - sx, wakkaY - sy);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestSlot = idx;
+                    }
+                });
+
+                const isFixed = el.dataset.fixed === 'true';
+                
+                if (minDistance < 40 && closestSlot !== -1) {
                     const text = el.querySelector('.tanzaku-input').innerText.trim();
+                    
                     if (text === '') {
                         el.style.opacity = '0';
                         setTimeout(() => el.remove(), 300);
+                        return;
+                    }
+
+                    if (!isFixed) {
+                        el.style.pointerEvents = 'none';
+                        const color = el.querySelector('.tanzaku-paper').style.backgroundColor;
+                        
+                        try {
+                            const res = await fetchAPI('POST', '/api/wishes', {
+                                text, color, slot_index: closestSlot, user_token: userToken
+                            });
+                            const data = await res.json();
+                            
+                            if (data.success) {
+                                triggerStarfall(wakkaX, wakkaY);
+                                
+                                // 保存成功後、短冊の見た目を更新（★ボタンを追加するため再生成）
+                                el.remove();
+                                currentWishes.push(data.wish);
+                                createWishElement(data.wish, false);
+
+                                if (data.bamboo_id > currentBambooId) {
+                                    latestBambooId = data.bamboo_id;
+                                    setTimeout(() => loadBamboo(latestBambooId), 1500);
+                                }
+                            } else {
+                                throw new Error(data.error || "Failed to save");
+                            }
+                        } catch (e) {
+                            el.style.left = `calc(50% - 2.25rem)`;
+                            el.style.top = `40%`;
+                            el.style.pointerEvents = 'auto';
+                            alert("吊るすのに失敗しました: " + e.message);
+                        }
+                    } else if (isFixed && el.dataset.slot != closestSlot) {
+                        const wrapper = document.querySelector(`.html-branch-wrapper[data-slot-index="${el.dataset.slot}"]`);
+                        if (wrapper) {
+                            wrapper.appendChild(el);
+                            const relX = parseFloat(wrapper.dataset.relX);
+                            const relY = parseFloat(wrapper.dataset.relY);
+                            el.style.left = `calc(${relX}px - 2.25rem)`;
+                            el.style.top = `calc(${relY}px - 0.5rem)`;
+                        }
+                    }
+
+                } else {
+                    if (isFixed) {
+                        const origPos = SLOT_POSITIONS[el.dataset.slot];
+                        const osx = parentRect.left + parentRect.width * (origPos.x / 100);
+                        const osy = parentRect.top + parentRect.height * (origPos.y / 100);
+                        const distFromOrig = Math.hypot(wakkaX - osx, wakkaY - osy);
+                        
+                        if (distFromOrig > 50) {
+                            el.style.opacity = '0';
+                            el.style.transform = 'scale(0.8) translateY(20px)';
+                            
+                            try {
+                                await fetchAPI('DELETE', '/api/wishes', {
+                                    id: el.dataset.id,
+                                    bamboo_id: currentBambooId,
+                                    user_token: userToken
+                                });
+                                
+                                currentWishes = currentWishes.filter(w => w.id !== el.dataset.id);
+                                setTimeout(() => el.remove(), 300);
+                            } catch (e) {
+                                const wrapper = document.querySelector(`.html-branch-wrapper[data-slot-index="${el.dataset.slot}"]`);
+                                if (wrapper) {
+                                    el.style.opacity = '1';
+                                    el.style.transform = 'none';
+                                    wrapper.appendChild(el);
+                                    const relX = parseFloat(wrapper.dataset.relX);
+                                    const relY = parseFloat(wrapper.dataset.relY);
+                                    el.style.left = `calc(${relX}px - 2.25rem)`;
+                                    el.style.top = `calc(${relY}px - 0.5rem)`;
+                                }
+                            }
+                        } else {
+                            const wrapper = document.querySelector(`.html-branch-wrapper[data-slot-index="${el.dataset.slot}"]`);
+                            if (wrapper) {
+                                wrapper.appendChild(el);
+                                const relX = parseFloat(wrapper.dataset.relX);
+                                const relY = parseFloat(wrapper.dataset.relY);
+                                el.style.left = `calc(${relX}px - 2.25rem)`;
+                                el.style.top = `calc(${relY}px - 0.5rem)`;
+                            }
+                        }
+                    } else {
+                        const text = el.querySelector('.tanzaku-input').innerText.trim();
+                        if (text === '') {
+                            el.style.opacity = '0';
+                            setTimeout(() => el.remove(), 300);
+                        }
                     }
                 }
             }
-        }
 
-        async function loadBamboo(id = 'latest') {
-            const layer = document.getElementById('wishes-layer');
-            layer.style.opacity = '0';
-            
-            try {
-                const res = await fetchAPI('GET', `/api/bamboo?id=${id}`);
-                const data = await res.json();
+            async function loadBamboo(id = 'latest') {
+                const layer = document.getElementById('wishes-layer');
+                layer.style.opacity = '0';
                 
-                currentBambooId = data.id;
-                latestBambooId = data.latest_id;
-                currentWishes = data.wishes;
+                try {
+                    const res = await fetchAPI('GET', `/api/bamboo?id=${id}`);
+                    const data = await res.json();
+                    
+                    currentBambooId = data.id;
+                    latestBambooId = data.latest_id;
+                    currentWishes = data.wishes;
 
-                setTimeout(() => {
-                    layer.innerHTML = '';
-                    drawBamboo(); 
+                    setTimeout(() => {
+                        drawBamboo(); 
+                        currentWishes.forEach(wish => createWishElement(wish, false));
+                        
+                        // document.getElementById('lbl-bamboo-id').innerText = currentBambooId;
+                        
+                        document.getElementById('btn-prev').disabled = (currentBambooId <= 1);
+                        document.getElementById('btn-next').disabled = (currentBambooId >= latestBambooId);
+                        
+                        layer.style.opacity = '1';
+                    }, 300);
                     
-                    currentWishes.forEach(wish => createWishElement(wish, false));
-                    
-                    // document.getElementById('lbl-bamboo-id').innerText = currentBambooId;
-                    
-                    document.getElementById('btn-prev').disabled = (currentBambooId <= 1);
-                    document.getElementById('btn-next').disabled = (currentBambooId >= latestBambooId);
-                    
+                } catch (e) {
+                    console.error("Load error:", e);
                     layer.style.opacity = '1';
-                }, 300);
-                
-            } catch (e) {
-                console.error("Load error:", e);
-                layer.style.opacity = '1';
+                }
             }
-        }
 
-        document.getElementById('fab-pen').addEventListener('click', () => {
-            const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
-            createWishElement({ color: randomColor }, true);
-        });
-
-        document.getElementById('btn-prev').addEventListener('click', () => {
-            if (currentBambooId > 1) loadBamboo(currentBambooId - 1);
-        });
-        document.getElementById('btn-next').addEventListener('click', () => {
-            if (currentBambooId < latestBambooId) loadBamboo(currentBambooId + 1);
-        });
-
-        window.addEventListener('resize', () => {
-            drawBamboo();
-        });
-
-        function triggerStarfall(x, y) {
-            const rx = x / window.innerWidth;
-            const ry = y / window.innerHeight;
-            confetti({
-                particleCount: 50,
-                spread: 70,
-                origin: { x: rx, y: ry },
-                colors: ['#fbbf24', '#fef08a', '#ffffff'],
-                shapes: ['star'],
-                ticks: 300,
-                gravity: 1.2
+            document.getElementById('fab-pen').addEventListener('click', () => {
+                const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+                createWishElement({ color: randomColor }, true);
             });
-        }
 
-        window.addEventListener('load', () => {
-             loadBamboo('latest');
-        });
+            document.getElementById('btn-prev').addEventListener('click', () => {
+                if (currentBambooId > 1) loadBamboo(currentBambooId - 1);
+            });
+            document.getElementById('btn-next').addEventListener('click', () => {
+                if (currentBambooId < latestBambooId) loadBamboo(currentBambooId + 1);
+            });
 
-    </script>
-</body>
+            window.addEventListener('resize', () => {
+                drawBamboo();
+            });
+
+            function triggerStarfall(x, y) {
+                const rx = x / window.innerWidth;
+                const ry = y / window.innerHeight;
+                confetti({
+                    particleCount: 50,
+                    spread: 70,
+                    origin: { x: rx, y: ry },
+                    colors: ['#fbbf24', '#fef08a', '#ffffff'],
+                    shapes: ['star'],
+                    ticks: 300,
+                    gravity: 1.2
+                });
+            }
+
+            window.addEventListener('load', () => {
+                loadBamboo('latest');
+            });
+
+        </script>
+    </body>
 </html>

@@ -1,0 +1,196 @@
+/* 風の周期を全体で統一して枝と短冊の揺れを同期させる */
+:root {
+    --wind-cycle: 5s;
+}
+
+/* 夜空の背景 */
+body {
+    background: radial-gradient(circle at bottom, #1e1b4b 0%, #0f172a 100%);
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Noto Serif JP', serif;
+    touch-action: none;
+}
+
+/* 縦書き設定 */
+.vertical-text {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+}
+
+/* 流れ星 */
+.shooting-star {
+    position: absolute;
+    width: 2px;
+    height: 80px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1));
+    opacity: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+@keyframes shooting {
+    0% { transform: translate(0, 0) rotate(45deg); opacity: 1; }
+    20% { transform: translate(-100vw, 100vw) rotate(45deg); opacity: 0; }
+    100% { opacity: 0; }
+}
+
+/* 枝と短冊ラッパーの揺れアニメーション (風を受けて全体が右に少し傾く) */
+.bamboo-branch, .html-branch-wrapper {
+    animation: sway-branch var(--wind-cycle) ease-in-out infinite;
+}
+@keyframes sway-branch {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(3deg); }
+}
+
+/* ドラッグ時の浮遊感 */
+.dragging {
+    z-index: 100 !important;
+    transform: scale(1.1) rotate(-3deg) !important;
+    filter: drop-shadow(0 15px 15px rgba(0,0,0,0.6)) !important;
+    transition: transform 0.1s;
+}
+
+/* HTML側の枝の起点を表す透明ラッパー */
+.html-branch-wrapper {
+    position: absolute;
+    z-index: 10;
+}
+
+/* 短冊の基本スタイル */
+.tanzaku-el {
+    margin-top: 2.4rem;
+    position: absolute;
+    width: 5rem;
+    height: 14rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: left 0.3s ease-out, top 0.3s ease-out, opacity 0.3s;
+}
+
+/* 短冊自身の揺れアニメーション（ラッパーで枝の揺れを継承しつつ、自身も揺れる） */
+.tanzaku-el[data-fixed="true"]:not(.dragging) {
+    transform-origin: 50% -32px; /* ワッカの円の中心あたりを支点に設定 */
+    animation: sway-tanzaku var(--wind-cycle) ease-in-out infinite;
+}
+@keyframes sway-tanzaku {
+    0%, 100% { transform: rotate(-2deg); }
+    50% { transform: rotate(4deg); }
+}
+
+/* 穴と3D立体交差の紐 */
+.tanzaku-paper {
+    position: absolute;
+    inset: 0;
+    -webkit-mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
+    mask-image: radial-gradient(circle at 50% 16px, transparent 4px, black 5px);
+    z-index: 2;
+}
+.koyori-loop {
+    position: absolute;
+    top: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 50px;
+    border: 2px solid #9c6d2f;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+.koyori-loop.back { z-index: 1; clip-path: inset(0 50% 0 0); }
+.koyori-loop.front { z-index: 3; clip-path: inset(0 0 0 50%); }
+
+.wakka-handle {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 40px;
+    cursor: grab;
+    z-index: 10;
+}
+.wakka-handle:active { cursor: grabbing; }
+
+.tanzaku-input {
+    position: relative;
+    z-index: 4;
+    margin-top: 16px;
+    flex-grow: 1;
+    width: 100%;
+    padding: 0.5rem 0.2rem;
+    outline: none;
+    background: transparent;
+    text-align: start;
+    font-size: 1.1rem;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    line-height: 1.4;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+/* 「★願う！」ボタン */
+.star-btn {
+    position: absolute;
+    bottom: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.4);
+    color: #fef08a;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all 0.2s;
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: auto;
+}
+.star-btn:hover {
+    background: rgba(253, 224, 71, 0.3);
+    transform: translateX(-50%) scale(1.05);
+}
+.star-btn:active { transform: translateX(-50%) scale(0.95); }
+
+.star-btn.active {
+    background: rgba(253, 224, 71, 0.6);
+    color: #fff;
+    border-color: rgba(253, 224, 71, 0.8);
+    box-shadow: 0 0 10px rgba(253, 224, 71, 0.4);
+}
+
+/* スロットマーカー */
+.slot-marker {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0.5);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    z-index: 20;
+}
+body.is-dragging .slot-marker.is-empty {
+    opacity: 0.4;
+    transform: translate(-50%, -50%) scale(0.8);
+    border: 2px dashed rgba(253, 224, 71, 0.5);
+}
+body.is-dragging .slot-marker.is-empty.active {
+    background: radial-gradient(circle, rgba(253, 224, 71, 0.8) 0%, rgba(253, 224, 71, 0) 70%);
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+    border: none;
+    animation: pulse-glow 1s infinite alternate;
+}
+@keyframes pulse-glow {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
+    100% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+}
