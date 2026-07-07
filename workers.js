@@ -6,28 +6,7 @@ const CORS_HEADERS = {
 };
 
 // NGワードの設定 (正規表現)
-const NG_PATTERNS = [
-  /死亡/i,
-  /重傷/i,
-  /殺害/i,
-  /傷害/i,
-  /暴力/i,
-  /童貞/i,
-  /死ね/i,
-  /殺す/i,
-  /セックス/i,
-  /ポルノ/i,
-  /レイプ/i,
-  /オナニー?/i,
-  /エッチ/i,
-  /風俗/i,
-  /sex/i,
-  /ちん(ぽ|こ|ちん)/i,
-  /お?まんこ/i,
-  /大麻/i,
-  /覚醒剤/i,
-  /麻薬/i,  
-];
+const NG_PATTERNS = [];
 
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
