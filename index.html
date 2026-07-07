@@ -540,6 +540,11 @@
                                 currentWishes.push(data.wish);
                                 createWishElement(data.wish, false);
 
+                                if (currentWishes.length >= 12 && currentBambooId === latestBambooId) {
+                                    latestBambooId = currentBambooId + 1;
+                                    document.getElementById('btn-next').disabled = false;
+                                }
+
                                 if (data.bamboo_id > currentBambooId) {
                                     latestBambooId = data.bamboo_id;
                                     setTimeout(() => loadBamboo(latestBambooId), 1500);
@@ -627,6 +632,11 @@
                     currentBambooId = data.id;
                     latestBambooId = data.latest_id;
                     currentWishes = data.wishes;
+
+                    // 読み込んだ最新の竹がすでに12個満杯なら、次の空の竹へ進めるようにロックを先行解除する
+                    if (currentBambooId === latestBambooId && currentWishes.length >= 12) {
+                        latestBambooId = currentBambooId + 1;
+                    }
 
                     setTimeout(() => {
                         drawBamboo(); 
